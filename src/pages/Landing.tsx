@@ -21,7 +21,7 @@ const Landing = () => {
             <div className="w-8 h-8 rounded-lg bg-gradient-rose flex items-center justify-center">
               <Palette className="w-4 h-4 text-primary-foreground" />
             </div>
-            <span className="font-display text-xl font-semibold">Studio Flow</span>
+            <span className="font-display text-xl font-semibold">HiveBoard</span>
           </motion.div>
 
           <motion.div
@@ -217,7 +217,7 @@ const Landing = () => {
                 Ready to Transform Your Creative Process?
               </h2>
               <p className="text-background/70 text-lg max-w-xl mx-auto mb-10">
-                Join thousands of designers who are already creating together on Studio Flow.
+                Join thousands of designers who are already creating together on HiveBoard.
               </p>
               <Button
                 variant="hero"
@@ -243,10 +243,10 @@ const Landing = () => {
               <div className="w-8 h-8 rounded-lg bg-gradient-rose flex items-center justify-center">
                 <Palette className="w-4 h-4 text-primary-foreground" />
               </div>
-              <span className="font-display text-lg font-semibold">Studio Flow</span>
+              <span className="font-display text-lg font-semibold">HiveBoard</span>
             </div>
             <p className="text-muted-foreground text-sm">
-              © 2024 Studio Flow. Crafted for creative minds.
+              © 2024 HiveBoard. Crafted for creative minds.
             </p>
           </div>
         </div>

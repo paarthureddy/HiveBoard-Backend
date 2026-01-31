@@ -1,7 +1,7 @@
 {
-    "name": "studio-flow-backend",
+    "name": "hiveboard-backend",
     "version": "1.0.0",
-    "description": "Backend server for Studio Flow application",
+    "description": "Backend server for HiveBoard application",
     "main": "index.js",
     "type": "module",
     "scripts": {

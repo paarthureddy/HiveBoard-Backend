@@ -197,7 +197,7 @@ const Home = () => {
                             <Palette className="w-5 h-5 text-primary-foreground" />
                         </div>
                         <div>
-                            <h1 className="font-display text-xl font-semibold">Studio Flow</h1>
+                            <h1 className="font-display text-xl font-semibold">HiveBoard</h1>
                             <p className="text-sm text-muted-foreground">Welcome back, {user?.name}</p>
                         </div>
                     </div>
