@@ -143,26 +143,122 @@ export const setupSocketHandlers = (io) => {
             }
         });
 
-        // Canvas update
-        socket.on('canvas-update', async (data) => {
+        // Real-time drawing events
+
+        // Draw stroke (completed stroke)
+        socket.on('draw-stroke', async (data) => {
             try {
                 if (socket.roomId) {
-                    // Broadcast to others in the room
-                    socket.to(socket.roomId).emit('canvas-updated', {
+                    // Broadcast stroke to others in the room
+                    socket.to(socket.roomId).emit('stroke-drawn', {
                         userId: socket.userId,
                         guestId: socket.guestId,
-                        data,
+                        socketId: socket.id,
+                        stroke: data.stroke,
+                        timestamp: Date.now(),
                     });
 
                     // Optionally save to database
-                    if (data.meetingId && data.canvasData) {
+                    if (data.meetingId) {
+                        const meeting = await Meeting.findById(data.meetingId);
+                        if (meeting) {
+                            if (!meeting.canvasData) {
+                                meeting.canvasData = { strokes: [] };
+                            }
+                            if (!meeting.canvasData.strokes) {
+                                meeting.canvasData.strokes = [];
+                            }
+                            meeting.canvasData.strokes.push(data.stroke);
+                            await meeting.save();
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error broadcasting stroke:', error);
+            }
+        });
+
+        // Draw point (live drawing feedback)
+        socket.on('draw-point', (data) => {
+            try {
+                if (socket.roomId) {
+                    // Broadcast point to others for live preview
+                    socket.to(socket.roomId).emit('point-drawn', {
+                        userId: socket.userId,
+                        guestId: socket.guestId,
+                        socketId: socket.id,
+                        point: data.point,
+                        strokeId: data.strokeId,
+                        color: data.color,
+                        width: data.width,
+                    });
+                }
+            } catch (error) {
+                console.error('Error broadcasting point:', error);
+            }
+        });
+
+        // Clear canvas
+        socket.on('clear-canvas', async (data) => {
+            try {
+                if (socket.roomId) {
+                    // Broadcast clear to others
+                    socket.to(socket.roomId).emit('canvas-cleared', {
+                        userId: socket.userId,
+                        guestId: socket.guestId,
+                        timestamp: Date.now(),
+                    });
+
+                    // Update database
+                    if (data.meetingId) {
                         await Meeting.findByIdAndUpdate(data.meetingId, {
-                            canvasData: data.canvasData,
+                            canvasData: { strokes: [] },
                         });
                     }
                 }
             } catch (error) {
-                console.error('Error updating canvas:', error);
+                console.error('Error clearing canvas:', error);
+            }
+        });
+
+        // Undo stroke
+        socket.on('undo-stroke', async (data) => {
+            try {
+                if (socket.roomId) {
+                    // Broadcast undo to others
+                    socket.to(socket.roomId).emit('stroke-undone', {
+                        userId: socket.userId,
+                        guestId: socket.guestId,
+                        timestamp: Date.now(),
+                    });
+
+                    // Update database
+                    if (data.meetingId) {
+                        const meeting = await Meeting.findById(data.meetingId);
+                        if (meeting && meeting.canvasData && meeting.canvasData.strokes) {
+                            meeting.canvasData.strokes.pop();
+                            await meeting.save();
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error undoing stroke:', error);
+            }
+        });
+
+        // Request canvas state (for late joiners)
+        socket.on('request-canvas-state', async (data) => {
+            try {
+                if (data.meetingId) {
+                    const meeting = await Meeting.findById(data.meetingId);
+                    if (meeting && meeting.canvasData) {
+                        socket.emit('canvas-state', {
+                            strokes: meeting.canvasData.strokes || [],
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching canvas state:', error);
             }
         });
 

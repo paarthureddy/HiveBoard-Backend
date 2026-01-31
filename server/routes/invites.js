@@ -49,7 +49,7 @@ router.post('/generate', protect, async (req, res) => {
 
         res.json({
             inviteToken: meeting.inviteToken,
-            inviteUrl: `${req.protocol}://${req.get('host')}/join/${meeting.inviteToken}`,
+            inviteUrl: `${process.env.CLIENT_URL || 'http://localhost:8080'}/join/${meeting.inviteToken}`,
             roomId: room.roomId,
         });
     } catch (error) {

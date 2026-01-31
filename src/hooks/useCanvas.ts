@@ -13,11 +13,23 @@ export interface Stroke {
   userId: string;
 }
 
-export const useCanvas = () => {
+export interface UseCanvasOptions {
+  onDrawStroke?: (stroke: Stroke) => void;
+  onDrawPoint?: (point: Point, strokeId: string, color: string, width: number) => void;
+  onClear?: () => void;
+  onUndo?: () => void;
+}
+
+export const useCanvas = (options: UseCanvasOptions = {}) => {
+  const { onDrawStroke, onDrawPoint, onClear, onUndo } = options;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [currentStroke, setCurrentStroke] = useState<Point[]>([]);
+  const currentStrokeIdRef = useRef<string>(crypto.randomUUID());
+
+  // Track remote live strokes: strokeId -> { points, color, width }
+  const [remoteLivedStrokes, setRemoteLiveStrokes] = useState<Map<string, { points: Point[], color: string, width: number }>>(new Map());
   const [brushColor, setBrushColor] = useState('#2D2926');
   const [brushWidth, setBrushWidth] = useState(3);
   const [tool, setTool] = useState<'brush' | 'eraser' | 'select'>('brush');
@@ -52,8 +64,17 @@ export const useCanvas = () => {
     if (!point) return;
 
     setIsDrawing(true);
+    // Generate new ID for this stroke
+    currentStrokeIdRef.current = crypto.randomUUID();
     setCurrentStroke([point]);
-  }, [getCanvasPoint]);
+
+    // Notify start (optional, treated as first point)
+    if (onDrawPoint) {
+      const color = tool === 'eraser' ? '#F8F6F3' : brushColor;
+      const width = tool === 'eraser' ? brushWidth * 3 : brushWidth;
+      onDrawPoint(point, currentStrokeIdRef.current, color, width);
+    }
+  }, [getCanvasPoint, onDrawPoint, tool, brushColor, brushWidth]);
 
   const draw = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     if (!isDrawing) return;
@@ -62,13 +83,20 @@ export const useCanvas = () => {
     if (!point) return;
 
     setCurrentStroke(prev => [...prev, point]);
-  }, [isDrawing, getCanvasPoint]);
+
+    // Broadcast point
+    if (onDrawPoint) {
+      const color = tool === 'eraser' ? '#F8F6F3' : brushColor;
+      const width = tool === 'eraser' ? brushWidth * 3 : brushWidth;
+      onDrawPoint(point, currentStrokeIdRef.current, color, width);
+    }
+  }, [isDrawing, getCanvasPoint, onDrawPoint, tool, brushColor, brushWidth]);
 
   const stopDrawing = useCallback(() => {
     if (!isDrawing || currentStroke.length === 0) return;
 
     const newStroke: Stroke = {
-      id: crypto.randomUUID(),
+      id: currentStrokeIdRef.current,
       points: currentStroke,
       color: tool === 'eraser' ? '#F8F6F3' : brushColor,
       width: tool === 'eraser' ? brushWidth * 3 : brushWidth,
@@ -78,16 +106,30 @@ export const useCanvas = () => {
     setStrokes(prev => [...prev, newStroke]);
     setCurrentStroke([]);
     setIsDrawing(false);
-  }, [isDrawing, currentStroke, brushColor, brushWidth, tool]);
+
+    // Broadcast full stroke
+    if (onDrawStroke) {
+      onDrawStroke(newStroke);
+    }
+  }, [isDrawing, currentStroke, brushColor, brushWidth, tool, onDrawStroke]);
 
   const clearCanvas = useCallback(() => {
     setStrokes([]);
     setCurrentStroke([]);
-  }, []);
+    setRemoteLiveStrokes(new Map());
+
+    if (onClear) {
+      onClear();
+    }
+  }, [onClear]);
 
   const undo = useCallback(() => {
     setStrokes(prev => prev.slice(0, -1));
-  }, []);
+
+    if (onUndo) {
+      onUndo();
+    }
+  }, [onUndo]);
 
   const drawStroke = useCallback((ctx: CanvasRenderingContext2D, points: Point[], color: string, width: number) => {
     if (points.length < 2) return;
@@ -131,14 +173,14 @@ export const useCanvas = () => {
     ctx.strokeStyle = '#E8E4DF';
     ctx.lineWidth = 0.5;
     const gridSize = 24;
-    
+
     for (let x = 0; x <= canvas.width; x += gridSize) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, canvas.height);
       ctx.stroke();
     }
-    
+
     for (let y = 0; y <= canvas.height; y += gridSize) {
       ctx.beginPath();
       ctx.moveTo(0, y);
@@ -151,13 +193,64 @@ export const useCanvas = () => {
       drawStroke(ctx, stroke.points, stroke.color, stroke.width);
     });
 
+    // Draw remote live strokes
+    remoteLivedStrokes.forEach(stroke => {
+      drawStroke(ctx, stroke.points, stroke.color, stroke.width);
+    });
+
     // Draw current stroke
     if (currentStroke.length > 0) {
       const color = tool === 'eraser' ? '#F8F6F3' : brushColor;
       const width = tool === 'eraser' ? brushWidth * 3 : brushWidth;
       drawStroke(ctx, currentStroke, color, width);
     }
-  }, [strokes, currentStroke, brushColor, brushWidth, tool, drawStroke]);
+  }, [strokes, currentStroke, remoteLivedStrokes, brushColor, brushWidth, tool, drawStroke]);
+
+  // Methods for handling remote updates
+  const drawRemoteStroke = useCallback((stroke: Stroke) => {
+    setStrokes(prev => [...prev, stroke]);
+    // Remove from live strokes if it was there
+    setRemoteLiveStrokes(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(stroke.id);
+      // Also try to delete if key might be missing (not robust but okay)
+      return newMap;
+    });
+  }, []);
+
+  const drawRemotePoint = useCallback((point: Point, strokeId: string, color: string, width: number) => {
+    setRemoteLiveStrokes(prev => {
+      const newMap = new Map(prev);
+      const existing = newMap.get(strokeId);
+
+      if (existing) {
+        newMap.set(strokeId, {
+          ...existing,
+          points: [...existing.points, point]
+        });
+      } else {
+        newMap.set(strokeId, {
+          points: [point],
+          color,
+          width
+        });
+      }
+      return newMap;
+    });
+  }, []);
+
+  const clearCanvasRemote = useCallback(() => {
+    setStrokes([]);
+    setRemoteLiveStrokes(new Map());
+  }, []);
+
+  const undoRemote = useCallback(() => {
+    setStrokes(prev => prev.slice(0, -1));
+  }, []);
+
+  const setInitialStrokes = useCallback((initialStrokes: Stroke[]) => {
+    setStrokes(initialStrokes);
+  }, []);
 
   return {
     canvasRef,
@@ -174,5 +267,11 @@ export const useCanvas = () => {
     stopDrawing,
     clearCanvas,
     undo,
+    // Export remote handlers
+    drawRemoteStroke,
+    drawRemotePoint,
+    clearCanvasRemote,
+    undoRemote,
+    setInitialStrokes,
   };
 };
