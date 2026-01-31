@@ -91,6 +91,40 @@ export const sendCursorMove = (position: { x: number; y: number }): void => {
     socket.emit('cursor-move', { position });
 };
 
+export const sendStroke = (data: {
+    meetingId?: string;
+    stroke: any;
+}): void => {
+    const socket = getSocket();
+    socket.emit('draw-stroke', data);
+};
+
+export const sendPoint = (data: {
+    meetingId?: string;
+    point: { x: number; y: number };
+    strokeId: string;
+    color: string;
+    width: number;
+}): void => {
+    const socket = getSocket();
+    socket.emit('draw-point', data);
+};
+
+export const sendClearCanvas = (data: { meetingId?: string }): void => {
+    const socket = getSocket();
+    socket.emit('clear-canvas', data);
+};
+
+export const sendUndo = (data: { meetingId?: string }): void => {
+    const socket = getSocket();
+    socket.emit('undo-stroke', data);
+};
+
+export const requestCanvasState = (data: { meetingId: string }): void => {
+    const socket = getSocket();
+    socket.emit('request-canvas-state', data);
+};
+
 export default {
     getSocket,
     connectSocket,
@@ -100,4 +134,9 @@ export default {
     getParticipants,
     sendCanvasUpdate,
     sendCursorMove,
+    sendStroke,
+    sendPoint,
+    sendClearCanvas,
+    sendUndo,
+    requestCanvasState,
 };

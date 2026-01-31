@@ -6,7 +6,7 @@ import { useCanvas } from "@/hooks/useCanvas";
 import { useAuth } from "@/contexts/AuthContext";
 import { useGuest } from "@/contexts/GuestContext";
 import { useSocket } from "@/hooks/useSocket";
-import { joinRoom, leaveRoom } from "@/lib/socket";
+import { joinRoom, leaveRoom, sendStroke, sendPoint, sendClearCanvas, sendUndo, requestCanvasState } from "@/lib/socket";
 import { meetingsAPI } from "@/lib/api";
 import Toolbar from "@/components/canvas/Toolbar";
 import ChatPanel from "@/components/canvas/ChatPanel";
@@ -59,7 +59,27 @@ const Canvas = () => {
     stopDrawing,
     clearCanvas,
     undo,
-  } = useCanvas();
+    drawRemoteStroke,
+    drawRemotePoint,
+    clearCanvasRemote,
+    undoRemote,
+    setInitialStrokes,
+  } = useCanvas({
+    onDrawStroke: (stroke) => {
+      // Broadcast stroke
+      sendStroke({ meetingId: meetingId || undefined, stroke });
+    },
+    onDrawPoint: (point, strokeId, color, width) => {
+      // Broadcast point
+      sendPoint({ meetingId: meetingId || undefined, point, strokeId, color, width });
+    },
+    onClear: () => {
+      sendClearCanvas({ meetingId: meetingId || undefined });
+    },
+    onUndo: () => {
+      sendUndo({ meetingId: meetingId || undefined });
+    }
+  });
 
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>(MOCK_MESSAGES);
@@ -93,6 +113,21 @@ const Canvas = () => {
     onCanvasUpdated: (data) => {
       console.log('🎨 Canvas updated by another user:', data);
       // TODO: Apply canvas updates from other users
+    },
+    onStrokeDrawn: (data) => {
+      drawRemoteStroke(data.stroke);
+    },
+    onPointDrawn: (data) => {
+      drawRemotePoint(data.point, data.strokeId, data.color, data.width);
+    },
+    onCanvasCleared: () => {
+      clearCanvasRemote();
+    },
+    onStrokeUndone: () => {
+      undoRemote();
+    },
+    onCanvasState: (data) => {
+      setInitialStrokes(data.strokes);
     },
   });
 
@@ -137,6 +172,11 @@ const Canvas = () => {
       name: user?.name || guestUser?.guestName || 'Anonymous',
       role: user ? 'owner' : 'guest',
     });
+
+    // Request initial canvas state
+    if (meetingId) {
+      requestCanvasState({ meetingId });
+    }
 
     // Leave room on unmount
     return () => {
