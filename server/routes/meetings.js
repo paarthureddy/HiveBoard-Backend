@@ -5,6 +5,38 @@ import protect from '../middleware/auth.js';
 const router = express.Router();
 
 // All routes are protected
+// @route   GET /api/meetings/public/:id
+// @desc    Get a single meeting by ID (Public access check)
+// @access  Public (if meeting allows guests)
+router.get('/public/:id', async (req, res) => {
+    try {
+        const meeting = await Meeting.findById(req.params.id);
+
+        if (!meeting) {
+            return res.status(404).json({ message: 'Meeting not found' });
+        }
+
+        // Check if meeting allows guests
+        if (!meeting.allowGuests) {
+            return res.status(403).json({ message: 'Guests are not allowed in this meeting' });
+        }
+
+        // Return only necessary info for guests
+        res.json({
+            _id: meeting._id,
+            title: meeting.title,
+            createdBy: meeting.createdBy, // Or populate name if needed
+            allowGuests: meeting.allowGuests,
+            canvasData: meeting.canvasData, // Needed for initial state
+            // Don't leak sensitive info
+        });
+    } catch (error) {
+        console.error('Get public meeting error:', error);
+        res.status(500).json({ message: 'Server error fetching meeting' });
+    }
+});
+
+// All routes after this are protected
 router.use(protect);
 
 // @route   GET /api/meetings

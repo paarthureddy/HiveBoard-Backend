@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
@@ -60,11 +60,13 @@ const ShareModal: React.FC<ShareModalProps> = ({
     };
 
     // Generate link when modal opens
-    useState(() => {
+
+
+    useEffect(() => {
         if (isOpen && !inviteUrl) {
             generateInviteLink();
         }
-    });
+    }, [isOpen, inviteUrl]);
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>

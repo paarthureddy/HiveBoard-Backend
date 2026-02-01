@@ -169,6 +169,7 @@ export const setupSocketHandlers = (io) => {
                                 meeting.canvasData.strokes = [];
                             }
                             meeting.canvasData.strokes.push(data.stroke);
+                            meeting.markModified('canvasData');
                             await meeting.save();
                         }
                     }
@@ -237,6 +238,7 @@ export const setupSocketHandlers = (io) => {
                         const meeting = await Meeting.findById(data.meetingId);
                         if (meeting && meeting.canvasData && meeting.canvasData.strokes) {
                             meeting.canvasData.strokes.pop();
+                            meeting.markModified('canvasData');
                             await meeting.save();
                         }
                     }
