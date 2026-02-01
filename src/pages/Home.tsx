@@ -180,9 +180,8 @@ const Home = () => {
     return (
 
         <div className="home-theme min-h-screen relative">
-            <div className="fixed inset-0 z-0">
-                <img src={homeBg} alt="" className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-black/40" />
+            <div className="fixed inset-0 z-0 bg-background">
+                <div className="absolute inset-0 bg-gradient-hero opacity-50" />
             </div>
 
             {/* Content Container */}

@@ -253,7 +253,7 @@
   color: hsl(var(--foreground));
 }
 
-/* HOME ONLY: Blue cloth + gold foil + ink */
+/* HOME THEME */
 .home-theme {
   /* Core palette */
   --background: 195 45% 10%;
@@ -299,7 +299,7 @@
   --shadow-glow: 0 0 28px hsl(43 70% 55% / .25);
 }
 
-/* Corner cloth overlays are now handled in Home.tsx via inline styles to ensure asset loading */
+/* Overlays are handled in Home.tsx */
 
 /* Make sure content sits above overlays */
 .home-theme>* {
