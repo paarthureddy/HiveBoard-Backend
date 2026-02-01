@@ -28,13 +28,7 @@ import {
   Eye,
 } from "lucide-react";
 
-// Mock data for demo
-const MOCK_USERS: User[] = [
-  { id: '1', name: 'You', role: 'owner', color: PRESENCE_COLORS[0], isOnline: true },
-  { id: '2', name: 'Emma Chen', role: 'editor', color: PRESENCE_COLORS[1], isOnline: true },
-  { id: '3', name: 'Lucas M.', role: 'viewer', color: PRESENCE_COLORS[2], isOnline: true },
-  { id: '4', name: 'Sofia R.', role: 'editor', color: PRESENCE_COLORS[3], isOnline: false },
-];
+
 
 const MOCK_MESSAGES: ChatMessage[] = [
   { id: '1', userId: '2', userName: 'Emma Chen', content: 'Love the new silhouette direction! 🎨', timestamp: new Date(Date.now() - 300000) },
@@ -321,7 +315,16 @@ const Canvas = () => {
         </div>
 
         {/* Center - User Presence */}
-        <UserPresence users={MOCK_USERS} currentUserId="1" />
+        <UserPresence
+          users={participants.map((p, i) => ({
+            id: p.userId || p.guestId || p.socketId,
+            name: p.name,
+            role: p.isOwner ? 'owner' : (p.userId ? 'editor' : 'viewer'),
+            color: PRESENCE_COLORS[i % PRESENCE_COLORS.length],
+            isOnline: true,
+          }))}
+          currentUserId={user?._id || guestUser?.guestId || ''}
+        />
 
         {/* Right side */}
         <div className="flex items-center gap-2">
@@ -402,8 +405,14 @@ const Canvas = () => {
 
         <ChatPanel
           messages={messages}
-          users={MOCK_USERS}
-          currentUserId="1"
+          users={participants.map((p, i) => ({
+            id: p.userId || p.guestId || p.socketId,
+            name: p.name,
+            role: p.isOwner ? 'owner' : (p.userId ? 'editor' : 'viewer'),
+            color: PRESENCE_COLORS[i % PRESENCE_COLORS.length],
+            isOnline: true,
+          }))}
+          currentUserId={user?._id || guestUser?.guestId || ''}
           onSendMessage={handleSendMessage}
           isOpen={isChatOpen}
           onToggle={() => {

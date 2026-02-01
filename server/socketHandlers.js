@@ -158,20 +158,12 @@ export const setupSocketHandlers = (io) => {
                         timestamp: Date.now(),
                     });
 
-                    // Optionally save to database
+                    // Save to database using atomic update
                     if (data.meetingId) {
-                        const meeting = await Meeting.findById(data.meetingId);
-                        if (meeting) {
-                            if (!meeting.canvasData) {
-                                meeting.canvasData = { strokes: [] };
-                            }
-                            if (!meeting.canvasData.strokes) {
-                                meeting.canvasData.strokes = [];
-                            }
-                            meeting.canvasData.strokes.push(data.stroke);
-                            meeting.markModified('canvasData');
-                            await meeting.save();
-                        }
+                        await Meeting.updateOne(
+                            { _id: data.meetingId },
+                            { $push: { 'canvasData.strokes': data.stroke } }
+                        );
                     }
                 }
             } catch (error) {
@@ -212,9 +204,10 @@ export const setupSocketHandlers = (io) => {
 
                     // Update database
                     if (data.meetingId) {
-                        await Meeting.findByIdAndUpdate(data.meetingId, {
-                            canvasData: { strokes: [] },
-                        });
+                        await Meeting.updateOne(
+                            { _id: data.meetingId },
+                            { $set: { 'canvasData.strokes': [] } }
+                        );
                     }
                 }
             } catch (error) {
@@ -235,12 +228,10 @@ export const setupSocketHandlers = (io) => {
 
                     // Update database
                     if (data.meetingId) {
-                        const meeting = await Meeting.findById(data.meetingId);
-                        if (meeting && meeting.canvasData && meeting.canvasData.strokes) {
-                            meeting.canvasData.strokes.pop();
-                            meeting.markModified('canvasData');
-                            await meeting.save();
-                        }
+                        await Meeting.updateOne(
+                            { _id: data.meetingId },
+                            { $pop: { 'canvasData.strokes': 1 } }
+                        );
                     }
                 }
             } catch (error) {
