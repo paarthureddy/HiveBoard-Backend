@@ -6,7 +6,7 @@ import { useCanvas } from "@/hooks/useCanvas";
 import { useAuth } from "@/contexts/AuthContext";
 import { useGuest } from "@/contexts/GuestContext";
 import { useSocket } from "@/hooks/useSocket";
-import { joinRoom, leaveRoom, sendStroke, sendPoint, sendClearCanvas, sendUndo, requestCanvasState } from "@/lib/socket";
+import { joinRoom, leaveRoom, sendStroke, sendPoint, sendClearCanvas, sendUndo, requestCanvasState, sendMessage } from "@/lib/socket";
 import { meetingsAPI } from "@/lib/api";
 import Toolbar from "@/components/canvas/Toolbar";
 import ChatPanel from "@/components/canvas/ChatPanel";
@@ -366,6 +366,28 @@ const Canvas = () => {
     onCanvasCleared: () => clearCanvasRemote(),
     onStrokeUndone: () => undoRemote(),
     onCanvasState: (data) => setInitialStrokes(data.strokes),
+    onChatHistory: (history) => {
+      setMessages(history.map((msg: any) => ({
+        id: msg._id,
+        userId: msg.userId || msg.guestId,
+        userName: msg.userName,
+        content: msg.content,
+        timestamp: new Date(msg.timestamp)
+      })));
+    },
+    onReceiveMessage: (msg: any) => {
+      setMessages(prev => {
+        // Dedup based on ID if necessary, mostly unlikely with randomUUID but DB has _id
+        if (prev.some(m => m.id === msg._id)) return prev;
+        return [...prev, {
+          id: msg._id,
+          userId: msg.userId || msg.guestId,
+          userName: msg.userName,
+          content: msg.content,
+          timestamp: new Date(msg.timestamp)
+        }];
+      });
+    },
   });
 
   // Fetch meeting data
@@ -440,14 +462,13 @@ const Canvas = () => {
   };
 
   const handleSendMessage = (content: string) => {
-    const newMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      userId: '1',
-      userName: user?.name || guestUser?.guestName || 'You',
-      content,
-      timestamp: new Date(),
-    };
-    setMessages(prev => [...prev, newMessage]);
+    sendMessage({
+      meetingId: meetingId || undefined,
+      userId: user?._id,
+      guestId: guestUser?.guestId,
+      name: user?.name || guestUser?.guestName || 'Anonymous',
+      content
+    });
   };
 
   const handleExport = () => {

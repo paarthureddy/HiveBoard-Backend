@@ -27,7 +27,7 @@ const httpServer = createServer(app);
 // Initialize Socket.io
 const io = new Server(httpServer, {
     cors: {
-        origin: 'http://localhost:8080',
+        origin: true,
         methods: ['GET', 'POST'],
         credentials: true,
     },
@@ -38,7 +38,7 @@ setupSocketHandlers(io);
 
 // Middleware
 app.use(cors({
-    origin: 'http://localhost:8080', // Vite dev server
+    origin: true, // Allow any origin
     credentials: true,
 }));
 app.use(express.json());

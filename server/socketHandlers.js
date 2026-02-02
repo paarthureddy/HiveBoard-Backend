@@ -1,5 +1,6 @@
 import Room from './models/Room.js';
 import Meeting from './models/Meeting.js';
+import Message from './models/Message.js';
 
 export const setupSocketHandlers = (io) => {
     io.on('connection', (socket) => {
@@ -58,6 +59,14 @@ export const setupSocketHandlers = (io) => {
                     socket.roomId = roomId;
                     socket.userId = userId;
                     socket.guestId = guestId;
+
+                    // Get chat history
+                    const messages = await Message.find({ roomId })
+                        .sort({ timestamp: -1 })
+                        .limit(50);
+
+                    // Emit history reversed (oldest first)
+                    socket.emit('chat-history', messages.reverse());
 
                     // Get all active participants
                     const participants = room.activeConnections.map(conn => ({
@@ -317,6 +326,29 @@ export const setupSocketHandlers = (io) => {
                 console.log(`❌ Client disconnected: ${socket.id}`);
             } catch (error) {
                 console.error('Error handling disconnect:', error);
+            }
+        });
+
+        // Chat Messages
+        socket.on('send-message', async (data) => {
+            try {
+                if (socket.roomId) {
+                    const { content, meetingId, userId, guestId, name } = data;
+
+                    const newMessage = await Message.create({
+                        roomId: socket.roomId,
+                        meetingId,
+                        userId,
+                        guestId,
+                        userName: name,
+                        content
+                    });
+
+                    // Broadcast to everyone in room including sender (to confirm save)
+                    io.to(socket.roomId).emit('receive-message', newMessage);
+                }
+            } catch (error) {
+                console.error('Error sending message:', error);
             }
         });
     });
