@@ -181,6 +181,7 @@ const Canvas = () => {
           height: 200
         };
         setStickyNotes(prev => [...prev, newNote]);
+        setTool('select');
       }
       return;
     }
@@ -520,7 +521,12 @@ const Canvas = () => {
           {stickyNotes.map(note => (
             <div key={note.id} className="absolute pointer-events-auto p-4 shadow-lg rounded-lg flex flex-col group" style={{ left: note.x, top: note.y, width: note.width || 200, height: note.height || 200, backgroundColor: note.color }}>
               <textarea className="w-full h-full bg-transparent resize-none outline-none font-handwriting text-lg text-gray-800 placeholder-gray-500/50" placeholder="Type here..." value={note.text} onChange={(e) => handleNoteChange(note.id, e.target.value)} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} />
-              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => handleNoteDelete(note.id)} className="p-1 hover:bg-black/10 rounded-full text-gray-600"><Trash2 className="w-4 h-4" /></button></div>
+              <div
+                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <button onClick={() => handleNoteDelete(note.id)} className="p-1 hover:bg-black/10 rounded-full text-gray-600"><Trash2 className="w-4 h-4" /></button>
+              </div>
             </div>
           ))}
           {textItems.map(item => (

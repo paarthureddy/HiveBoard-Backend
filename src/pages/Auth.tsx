@@ -54,12 +54,8 @@ const Auth = () => {
 
     return (
         <div className="min-h-screen w-full flex items-center justify-center bg-canvas-bg p-4">
-            <Card className="w-full max-w-[400px] shadow-lg border-primary/20">
+            <Card className="w-full max-w-[400px] shadow-xl border-2 border-primary/50">
                 <CardHeader className="text-center pb-2">
-                    <div className="mx-auto w-16 h-16 mb-4 rounded-xl overflow-hidden shadow-sm">
-                        <img src={logo} alt="HiveBoard Logo" className="w-full h-full object-cover" />
-                    </div>
-                    <CardTitle className="text-2xl font-display text-primary">HiveBoard</CardTitle>
                     <CardDescription>Collaborative Whiteboard for Creatives</CardDescription>
                 </CardHeader>
                 <CardContent>
