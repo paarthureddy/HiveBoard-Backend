@@ -16,6 +16,8 @@ interface UseSocketOptions {
     onStrokeUndone?: (data: { userId?: string; guestId?: string }) => void;
     onCanvasState?: (data: { strokes: any[] }) => void;
     onError?: (data: { message: string }) => void;
+    onChatHistory?: (messages: any[]) => void;
+    onReceiveMessage?: (message: any) => void;
 }
 
 export const useSocket = (options: UseSocketOptions = {}) => {
@@ -48,6 +50,8 @@ export const useSocket = (options: UseSocketOptions = {}) => {
         const handleStrokeUndone = (data: any) => optionsRef.current.onStrokeUndone?.(data);
         const handleCanvasState = (data: any) => optionsRef.current.onCanvasState?.(data);
         const handleError = (data: any) => optionsRef.current.onError?.(data);
+        const handleChatHistory = (data: any) => optionsRef.current.onChatHistory?.(data);
+        const handleReceiveMessage = (data: any) => optionsRef.current.onReceiveMessage?.(data);
 
         // Set up event listeners
         socket.on('room-joined', handleRoomJoined);
@@ -61,6 +65,8 @@ export const useSocket = (options: UseSocketOptions = {}) => {
         socket.on('canvas-cleared', handleCanvasCleared);
         socket.on('stroke-undone', handleStrokeUndone);
         socket.on('canvas-state', handleCanvasState);
+        socket.on('chat-history', handleChatHistory);
+        socket.on('receive-message', handleReceiveMessage);
         socket.on('error', handleError);
 
         // Cleanup on unmount
@@ -77,6 +83,8 @@ export const useSocket = (options: UseSocketOptions = {}) => {
             socket.off('canvas-cleared', handleCanvasCleared);
             socket.off('stroke-undone', handleStrokeUndone);
             socket.off('canvas-state', handleCanvasState);
+            socket.off('chat-history', handleChatHistory);
+            socket.off('receive-message', handleReceiveMessage);
 
             disconnectSocket();
         };

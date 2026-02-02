@@ -120,6 +120,17 @@ export const sendUndo = (data: { meetingId?: string }): void => {
     socket.emit('undo-stroke', data);
 };
 
+export const sendMessage = (data: {
+    meetingId?: string;
+    userId?: string;
+    guestId?: string;
+    name: string;
+    content: string;
+}): void => {
+    const socket = getSocket();
+    socket.emit('send-message', data);
+};
+
 export const requestCanvasState = (data: { meetingId: string }): void => {
     const socket = getSocket();
     socket.emit('request-canvas-state', data);
