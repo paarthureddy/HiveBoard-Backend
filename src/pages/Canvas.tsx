@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
+import html2canvas from 'html2canvas';
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useCanvas } from "@/hooks/useCanvas";
@@ -75,6 +76,7 @@ const Canvas = () => {
   const [stickyColor, setStickyColor] = useState('#fef3c7'); // Default yellow
   const overlayRef = useRef<HTMLDivElement>(null);
   const croquisLayerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   // Destructure new view controls
   const {
@@ -515,13 +517,32 @@ const Canvas = () => {
     });
   };
 
-  const handleExport = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const link = document.createElement('a');
-    link.download = `${sessionName.replace(/\s+/g, '-').toLowerCase()}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+  const handleExport = async () => {
+    // Clear selection to avoid capturing controls
+    setSelectedCroquisId(null);
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    if (!contentRef.current) return;
+
+    try {
+      // Use html2canvas to capture the entire composition
+      const canvas = await html2canvas(contentRef.current, {
+        scale: 2, // High resolution
+        useCORS: true, // Allow loading cross-origin images (if any)
+        backgroundColor: '#ffffff', // Force white background for JPG
+        logging: false,
+      });
+
+      const link = document.createElement('a');
+      link.download = `${sessionName.replace(/\s+/g, '-').toLowerCase()}.jpg`;
+      link.href = canvas.toDataURL('image/jpeg', 0.9);
+      link.click();
+    } catch (error) {
+      console.error('Export failed:', error);
+    }
   };
 
   const handleShare = () => {
@@ -576,80 +597,85 @@ const Canvas = () => {
         onMouseUp={handleCanvasMouseUp}
         onMouseLeave={handleCanvasMouseUp}
       >
-        {/* HTML Overlay (Stickies/Text) - Z-20 */}
-        <div ref={overlayRef} className="absolute inset-0 pointer-events-none z-20" style={{ transformOrigin: '0 0' }}>
-          {stickyNotes.map(note => (
-            <div key={note.id} className="absolute pointer-events-auto p-4 shadow-lg rounded-lg flex flex-col group" style={{ left: note.x, top: note.y, width: note.width || 200, height: note.height || 200, backgroundColor: note.color }}>
-              <textarea className="w-full h-full bg-transparent resize-none outline-none font-handwriting text-lg text-gray-800 placeholder-gray-500/50" placeholder="Type here..." value={note.text} onChange={(e) => handleNoteChange(note.id, e.target.value)} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} />
-              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => handleNoteDelete(note.id)} className="p-1 hover:bg-black/10 rounded-full text-gray-600"><Trash2 className="w-4 h-4" /></button></div>
-            </div>
-          ))}
-          {textItems.map(item => (
-            <div key={item.id} className="absolute pointer-events-auto group min-w-[200px]" style={{ left: item.x, top: item.y }}>
-              <textarea className="w-full bg-transparent resize-none outline-none font-sans text-2xl font-medium leading-tight text-foreground bg-background/50 backdrop-blur-[1px] rounded-lg px-2 py-1 border border-transparent hover:border-border/50 focus:border-primary/50 transition-colors" placeholder="Type text..." value={item.text} onChange={(e) => { handleTextChange(item.id, e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }} style={{ color: item.color, height: 'auto', overflow: 'hidden' }} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} autoFocus />
-              <button onClick={() => handleTextDelete(item.id)} className="absolute -top-3 -right-3 p-1.5 bg-background border border-border rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 hover:text-destructive text-muted-foreground"><Trash2 className="w-3 h-3" /></button>
-            </div>
-          ))}
-        </div>
+        <div ref={contentRef} className="absolute inset-0 z-0">
+          <div className="absolute inset-0 bg-canvas-bg pointer-events-none -z-10" />
 
-        {/* Croquis Layer - Z-1 */}
-        <div ref={croquisLayerRef} className="absolute inset-0 pointer-events-none z-1" style={{ transformOrigin: '0 0' }}>
-          {croquisItems.map(item => (
-            <div key={item.id} className={`absolute group pointer-events-auto ${tool === 'select' ? 'cursor-move' : ''}`} style={{ left: item.x, top: item.y, width: item.width, height: item.height, opacity: item.opacity, transform: `scaleX(${item.isFlipped ? -1 : 1})` }}
-              onMouseDown={(e) => {
-                if (tool !== 'select' || item.isLocked) return;
-                if (e.button !== 0) return;
-                e.stopPropagation();
-                setSelectedCroquisId(item.id);
-                const startX = e.clientX;
-                const startY = e.clientY;
-                const startItemX = item.x;
-                const startItemY = item.y;
-                const onMove = (moveEvent: MouseEvent) => {
-                  const scale = scaleRef.current || 1;
-                  const dx = (moveEvent.clientX - startX) / scale;
-                  const dy = (moveEvent.clientY - startY) / scale;
-                  updateCroquis(item.id, { x: startItemX + dx, y: startItemY + dy });
-                };
-                const onUp = () => {
-                  window.removeEventListener('mousemove', onMove);
-                  window.removeEventListener('mouseup', onUp);
-                };
-                window.addEventListener('mousemove', onMove);
-                window.addEventListener('mouseup', onUp);
-              }}
-            >
-              <img src={item.src} className={`w-full h-full object-contain ${selectedCroquisId === item.id ? 'ring-2 ring-primary ring-offset-2 rounded-lg' : ''}`} draggable={false} alt="Croquis" />
-              {selectedCroquisId === item.id && (
-                <div className="absolute -top-14 left-1/2 -translate-x-1/2 bg-popover/95 backdrop-blur border border-border rounded-xl shadow-xl flex items-center p-1.5 gap-2 z-50 pointer-events-auto min-w-[300px]" style={{ transform: `scaleX(${item.isFlipped ? -1 : 1})` }} onMouseDown={e => e.stopPropagation()}>
-                  <div className="w-24 px-2 flex items-center gap-2"><Eye className="w-3 h-3 text-muted-foreground" /><Slider value={[item.opacity]} min={0.1} max={1} step={0.1} onValueChange={([v]) => updateCroquis(item.id, { opacity: v })} className="flex-1" /></div>
-                  <div className="h-4 w-px bg-border" />
-                  <button onClick={() => updateCroquis(item.id, { isLocked: !item.isLocked })} className={cn("p-1.5 hover:bg-muted rounded-lg transition-colors", item.isLocked && "text-destructive bg-destructive/10")} title="Lock">{item.isLocked ? <Lock className="w-4 h-4" /> : <LockOpen className="w-4 h-4" />}</button>
-                  <button onClick={() => updateCroquis(item.id, { isFlipped: !item.isFlipped })} className={cn("p-1.5 hover:bg-muted rounded-lg transition-colors", item.isFlipped && "bg-muted text-primary")} title="Flip Horizontal"><FlipHorizontal className="w-4 h-4" /></button>
-                  <button onClick={() => { const newItem = { ...item, id: crypto.randomUUID(), x: item.x + 30, y: item.y + 30 }; setCroquisItems(prev => [...prev, newItem]); setSelectedCroquisId(newItem.id); }} className="p-1.5 hover:bg-muted rounded-lg transition-colors" title="Duplicate"><Copy className="w-4 h-4" /></button>
-                  <div className="h-4 w-px bg-border" />
-                  <button onClick={() => {
-                    const dpr = window.devicePixelRatio || 1;
-                    const canvasWidth = canvasRef.current ? canvasRef.current.width / dpr : window.innerWidth;
-                    const canvasHeight = canvasRef.current ? canvasRef.current.height / dpr : window.innerHeight;
-                    if (!offsetRef.current) return;
-                    const viewCenterX = -offsetRef.current.x / scale + (canvasWidth / scale / 2);
-                    const viewCenterY = -offsetRef.current.y / scale + (canvasHeight / scale / 2);
-                    updateCroquis(item.id, { x: viewCenterX - item.width / 2, y: viewCenterY - item.height / 2 });
-                  }} className="p-1.5 hover:bg-muted rounded-lg transition-colors" title="Snap to Center"><AlignCenter className="w-4 h-4" /></button>
-                  <button onClick={() => updateCroquis(item.id, { width: 300, height: 600 })} className="p-1.5 hover:bg-muted rounded-lg transition-colors" title="Reset Scale"><Maximize2 className="w-4 h-4" /></button>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+          {/* HTML Overlay (Stickies/Text) - Z-20 */}
+          <div ref={overlayRef} className="absolute inset-0 pointer-events-none z-20" style={{ transformOrigin: '0 0' }}>
+            {stickyNotes.map(note => (
+              <div key={note.id} className="absolute pointer-events-auto p-4 shadow-lg rounded-lg flex flex-col group" style={{ left: note.x, top: note.y, width: note.width || 200, height: note.height || 200, backgroundColor: note.color }}>
+                <textarea className="w-full h-full bg-transparent resize-none outline-none font-handwriting text-lg text-gray-800 placeholder-gray-500/50" placeholder="Type here..." value={note.text} onChange={(e) => handleNoteChange(note.id, e.target.value)} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} />
+                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => handleNoteDelete(note.id)} className="p-1 hover:bg-black/10 rounded-full text-gray-600"><Trash2 className="w-4 h-4" /></button></div>
+              </div>
+            ))}
+            {textItems.map(item => (
+              <div key={item.id} className="absolute pointer-events-auto group min-w-[200px]" style={{ left: item.x, top: item.y }}>
+                <textarea className="w-full bg-transparent resize-none outline-none font-sans text-2xl font-medium leading-tight text-foreground bg-background/50 backdrop-blur-[1px] rounded-lg px-2 py-1 border border-transparent hover:border-border/50 focus:border-primary/50 transition-colors" placeholder="Type text..." value={item.text} onChange={(e) => { handleTextChange(item.id, e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }} style={{ color: item.color, height: 'auto', overflow: 'hidden' }} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} autoFocus />
+                <button onClick={() => handleTextDelete(item.id)} className="absolute -top-3 -right-3 p-1.5 bg-background border border-border rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 hover:text-destructive text-muted-foreground"><Trash2 className="w-3 h-3" /></button>
+              </div>
+            ))}
+          </div>
 
-        <motion.div className="absolute inset-0 pointer-events-none">
-          {/* Grid Canvas - Z-0 */}
-          <canvas ref={gridCanvasRef} className="absolute inset-0 pointer-events-none z-0" />
-          {/* Main Drawing Canvas - Z-10 */}
-          <canvas ref={canvasRef} className={`w-full h-full touch-none ${tool === 'select' ? 'pointer-events-none' : (isPanning || isSpacePressed ? 'cursor-grab active:cursor-grabbing' : isReadOnly ? 'cursor-not-allowed' : 'cursor-crosshair')}`} />
-        </motion.div>
+          {/* Croquis Layer - Z-1 */}
+          <div ref={croquisLayerRef} className="absolute inset-0 pointer-events-none z-1" style={{ transformOrigin: '0 0' }}>
+            {croquisItems.map(item => (
+              <div key={item.id} className={`absolute group pointer-events-auto ${tool === 'select' ? 'cursor-move' : ''}`} style={{ left: item.x, top: item.y, width: item.width, height: item.height, opacity: item.opacity, transform: `scaleX(${item.isFlipped ? -1 : 1})` }}
+                onMouseDown={(e) => {
+                  if (tool !== 'select' || item.isLocked) return;
+                  if (e.button !== 0) return;
+                  e.stopPropagation();
+                  setSelectedCroquisId(item.id);
+                  const startX = e.clientX;
+                  const startY = e.clientY;
+                  const startItemX = item.x;
+                  const startItemY = item.y;
+                  const onMove = (moveEvent: MouseEvent) => {
+                    const scale = scaleRef.current || 1;
+                    const dx = (moveEvent.clientX - startX) / scale;
+                    const dy = (moveEvent.clientY - startY) / scale;
+                    updateCroquis(item.id, { x: startItemX + dx, y: startItemY + dy });
+                  };
+                  const onUp = () => {
+                    window.removeEventListener('mousemove', onMove);
+                    window.removeEventListener('mouseup', onUp);
+                  };
+                  window.addEventListener('mousemove', onMove);
+                  window.addEventListener('mouseup', onUp);
+                }}
+              >
+                <img src={item.src} className={`w-full h-full object-contain ${selectedCroquisId === item.id ? 'ring-2 ring-primary ring-offset-2 rounded-lg' : ''}`} draggable={false} alt="Croquis" />
+                {selectedCroquisId === item.id && (
+                  <div className="absolute -top-14 left-1/2 -translate-x-1/2 bg-popover/95 backdrop-blur border border-border rounded-xl shadow-xl flex items-center p-1.5 gap-2 z-50 pointer-events-auto min-w-[300px]" style={{ transform: `scaleX(${item.isFlipped ? -1 : 1})` }} onMouseDown={e => e.stopPropagation()}>
+                    <div className="w-24 px-2 flex items-center gap-2"><Eye className="w-3 h-3 text-muted-foreground" /><Slider value={[item.opacity]} min={0.1} max={1} step={0.1} onValueChange={([v]) => updateCroquis(item.id, { opacity: v })} className="flex-1" /></div>
+                    <div className="h-4 w-px bg-border" />
+                    <button onClick={() => updateCroquis(item.id, { isLocked: !item.isLocked })} className={cn("p-1.5 hover:bg-muted rounded-lg transition-colors", item.isLocked && "text-destructive bg-destructive/10")} title="Lock">{item.isLocked ? <Lock className="w-4 h-4" /> : <LockOpen className="w-4 h-4" />}</button>
+                    <button onClick={() => updateCroquis(item.id, { isFlipped: !item.isFlipped })} className={cn("p-1.5 hover:bg-muted rounded-lg transition-colors", item.isFlipped && "bg-muted text-primary")} title="Flip Horizontal"><FlipHorizontal className="w-4 h-4" /></button>
+                    <button onClick={() => { const newItem = { ...item, id: crypto.randomUUID(), x: item.x + 30, y: item.y + 30 }; setCroquisItems(prev => [...prev, newItem]); setSelectedCroquisId(newItem.id); }} className="p-1.5 hover:bg-muted rounded-lg transition-colors" title="Duplicate"><Copy className="w-4 h-4" /></button>
+                    <div className="h-4 w-px bg-border" />
+                    <button onClick={() => {
+                      const dpr = window.devicePixelRatio || 1;
+                      const canvasWidth = canvasRef.current ? canvasRef.current.width / dpr : window.innerWidth;
+                      const canvasHeight = canvasRef.current ? canvasRef.current.height / dpr : window.innerHeight;
+                      if (!offsetRef.current) return;
+                      const viewCenterX = -offsetRef.current.x / scale + (canvasWidth / scale / 2);
+                      const viewCenterY = -offsetRef.current.y / scale + (canvasHeight / scale / 2);
+                      updateCroquis(item.id, { x: viewCenterX - item.width / 2, y: viewCenterY - item.height / 2 });
+                    }} className="p-1.5 hover:bg-muted rounded-lg transition-colors" title="Snap to Center"><AlignCenter className="w-4 h-4" /></button>
+                    <button onClick={() => updateCroquis(item.id, { width: 300, height: 600 })} className="p-1.5 hover:bg-muted rounded-lg transition-colors" title="Reset Scale"><Maximize2 className="w-4 h-4" /></button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <motion.div className="absolute inset-0 pointer-events-none">
+            {/* Grid Canvas - Z-0 */}
+            <canvas ref={gridCanvasRef} className="absolute inset-0 pointer-events-none z-0" />
+            {/* Main Drawing Canvas - Z-10 */}
+            <canvas ref={canvasRef} className={`w-full h-full touch-none ${tool === 'select' ? 'pointer-events-none' : (isPanning || isSpacePressed ? 'cursor-grab active:cursor-grabbing' : isReadOnly ? 'cursor-not-allowed' : 'cursor-crosshair')}`} />
+          </motion.div>
+
+        </div>
 
         <div className="absolute top-4 right-4 bg-card/80 backdrop-blur-sm border border-border rounded-full px-3 py-1.5 text-xs font-mono text-muted-foreground select-none pointer-events-none z-30">{(scale * 100).toFixed(0)}%</div>
 
