@@ -56,6 +56,22 @@ const Canvas = () => {
   const [croquisItems, setCroquisItems] = useState<CroquisItem[]>([]);
   const [selectedCroquisId, setSelectedCroquisId] = useState<string | null>(null);
 
+  const { setGuestUser } = useGuest();
+
+  // Auto-generate guest identity if not authenticated and not already a guest
+  useEffect(() => {
+    if (!isAuthenticated && !guestUser) {
+      const randomId = crypto.randomUUID();
+      setGuestUser({
+        guestId: randomId,
+        guestName: `Guest ${randomId.slice(0, 4)}`,
+        meetingId: meetingId || '',
+        roomId: roomIdParam || '',
+        role: 'guest'
+      });
+    }
+  }, [isAuthenticated, guestUser, setGuestUser, meetingId, roomIdParam]);
+
   const [stickyColor, setStickyColor] = useState('#fef3c7'); // Default yellow
   const overlayRef = useRef<HTMLDivElement>(null);
   const croquisLayerRef = useRef<HTMLDivElement>(null);

@@ -96,7 +96,7 @@ const ChatPanel = ({
               ) : (
                 messages.map((message) => {
                   const user = getUserById(message.userId);
-                  const isCurrentUser = message.userId === currentUserId;
+                  const isCurrentUser = String(message.userId) === String(currentUserId);
 
                   return (
                     <motion.div
@@ -126,8 +126,8 @@ const ChatPanel = ({
                         </div>
                         <div
                           className={`px-3 py-2 rounded-xl text-sm ${isCurrentUser
-                              ? 'bg-primary text-primary-foreground rounded-br-sm'
-                              : 'bg-muted rounded-bl-sm'
+                            ? 'bg-primary text-primary-foreground rounded-br-sm'
+                            : 'bg-muted rounded-bl-sm'
                             }`}
                         >
                           {message.content}
