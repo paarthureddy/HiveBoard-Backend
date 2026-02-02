@@ -50,7 +50,7 @@ const AiChatPanel = ({
         setIsTyping(true);
 
         try {
-            const response = await fetch('http://localhost:5000/api/ai/chat', {
+            const response = await fetch('/api/ai/chat', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -58,7 +58,14 @@ const AiChatPanel = ({
                 body: JSON.stringify({ message: content }),
             });
 
-            const data = await response.json();
+            let data;
+            const text = await response.text();
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                console.error('Failed to parse response as JSON:', text);
+                throw new Error(`Server returned invalid response: ${text.substring(0, 100)}`);
+            }
 
             if (response.ok) {
                 const aiResponse: ChatMessage = {
@@ -72,13 +79,15 @@ const AiChatPanel = ({
             } else {
                 throw new Error(data.message || 'Failed to get response');
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('AI chat error:', error);
             const errorResponse: ChatMessage = {
                 id: crypto.randomUUID(),
                 userId: 'ai',
                 userName: 'AI Assistant',
-                content: "Sorry, I'm having trouble connecting right now. Please try again.",
+                content: error.message && !error.message.includes('object Object')
+                    ? `⚠️ ${error.message}`
+                    : "I'm sorry, I'm having a bit of trouble answering right now. Please try again in a moment.",
                 timestamp: new Date(),
             };
             setMessages(prev => [...prev, errorResponse]);

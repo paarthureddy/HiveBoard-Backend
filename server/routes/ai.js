@@ -40,26 +40,30 @@ router.post('/chat', async (req, res) => {
         }
 
         // Try multiple models to ensure compatibility
-        const modelsToTry = ["gemini-1.5-flash", "gemini-pro", "gemini-1.5-pro"];
+        // Verified: The following models are available for this key.
+        const modelsToTry = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro"];
 
         let resultText = "";
         let success = false;
         let lastError = null;
 
-        const systemPrompt = "You are a helpful AI assistant for HiveBoard. Keep responses concise.";
+        const systemPrompt = "You are a helpful AI assistant for HiveBoard. Responses MUST be very brief and concise (max 2 sentences).";
 
         for (const modelName of modelsToTry) {
             try {
                 console.log(`🤖 Attempting model: ${modelName}`);
 
                 const modelConfig = { model: modelName };
-                // 1.5 models support systemInstruction
-                if (modelName.includes('1.5')) {
+                // 1.5, 2.0, and 2.5 models support systemInstruction
+                if (modelName.includes('1.5') || modelName.includes('2.0') || modelName.includes('2.5')) {
                     modelConfig.systemInstruction = systemPrompt;
                 }
 
                 const model = genAI.getGenerativeModel(modelConfig);
-                const result = await model.generateContent(message);
+
+                // Add brevity instruction to the message itself as a backup
+                const enhancedMessage = `[INSTRUCTION: Be extremely concise] ${message}`;
+                const result = await model.generateContent(enhancedMessage);
                 const response = await result.response;
                 resultText = response.text();
 
