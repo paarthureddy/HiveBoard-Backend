@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import html2canvas from 'html2canvas';
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useCanvas } from "@/hooks/useCanvas";
 import { useAuth } from "@/contexts/AuthContext";
@@ -42,6 +42,7 @@ const MOCK_MESSAGES: ChatMessage[] = [];
 
 const Canvas = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
   const { guestUser, isGuest } = useGuest();
   const isReadOnly = !isAuthenticated;
@@ -592,6 +593,23 @@ const Canvas = () => {
         logging: false,
       });
 
+      // Save thumbnail if owner
+      if (meetingId && isAuthenticated) {
+        try {
+          // Create smaller thumbnail
+          const thumbCanvas = await html2canvas(contentRef.current, {
+            scale: 0.2, // Smaller scale for thumbnail
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            logging: false,
+          });
+          const thumbnail = thumbCanvas.toDataURL('image/jpeg', 0.6);
+          await meetingsAPI.update(meetingId, { thumbnail });
+        } catch (err) {
+          console.error("Failed to update thumbnail", err);
+        }
+      }
+
       const link = document.createElement('a');
       link.download = `${sessionName.replace(/\s+/g, '-').toLowerCase()}.jpg`;
       link.href = canvas.toDataURL('image/jpeg', 0.9);
@@ -621,11 +639,25 @@ const Canvas = () => {
 
       <motion.header className={`absolute top-0 left-0 right-0 p-4 flex items-center justify-between z-40 pointer-events-none ${isReadOnly ? 'mt-10' : ''}`}>
         <div className="flex items-center gap-4 pointer-events-auto bg-background/80 backdrop-blur-md border border-border/50 shadow-sm rounded-2xl px-3 py-2">
-          <Link to={isAuthenticated ? "/home" : "/"} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+          <button onClick={async () => {
+            if (meetingId && isAuthenticated && contentRef.current) {
+              try {
+                const thumbCanvas = await html2canvas(contentRef.current, {
+                  scale: 0.2,
+                  useCORS: true,
+                  backgroundColor: '#ffffff',
+                  logging: false,
+                });
+                const thumbnail = thumbCanvas.toDataURL('image/jpeg', 0.6);
+                await meetingsAPI.update(meetingId, { thumbnail });
+              } catch (e) { console.error(e); }
+            }
+            navigate(isAuthenticated ? "/home" : "/");
+          }} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden">
               <img src={logo} alt="HiveBoard Logo" className="w-full h-full object-cover" />
             </div>
-          </Link>
+          </button>
           <div className="h-5 w-px bg-border" />
           <div className="flex items-center gap-2">
             {isLoadingMeeting ? (
