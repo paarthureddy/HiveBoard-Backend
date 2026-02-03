@@ -196,6 +196,7 @@ const Canvas = () => {
           height: 200
         };
         setStickyNotes(prev => [...prev, newNote]);
+        setTool('select');
         sendAddSticky({
           meetingId: meetingId || undefined,
           note: newNote
@@ -613,10 +614,13 @@ const Canvas = () => {
         </div>
       )}
 
-      <motion.header className={`h-14 px-4 flex items-center justify-between border-b border-border bg-card/80 backdrop-blur-sm z-20 ${isReadOnly ? 'mt-10' : ''}`}>
+      <motion.header
+        className={`h-14 px-4 flex items-center justify-between border-b border-[rgb(95,74,139)] backdrop-blur-sm z-20 ${isReadOnly ? 'mt-10' : ''}`}
+        style={{ backgroundColor: 'rgba(95, 74, 139, 0.75)' }}
+      >
         <div className="flex items-center gap-4">
           <Link to={isAuthenticated ? "/home" : "/"} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden border-2 border-black/20">
               <img src={logo} alt="HiveBoard Logo" className="w-full h-full object-cover" />
             </div>
           </Link>
@@ -647,6 +651,26 @@ const Canvas = () => {
         onMouseUp={handleCanvasMouseUp}
         onMouseLeave={handleCanvasMouseUp}
       >
+        {/* HTML Overlay (Stickies/Text) - Z-20 */}
+        <div ref={overlayRef} className="absolute inset-0 pointer-events-none z-20" style={{ transformOrigin: '0 0' }}>
+          {stickyNotes.map(note => (
+            <div key={note.id} className="absolute pointer-events-auto p-4 shadow-lg rounded-lg flex flex-col group" style={{ left: note.x, top: note.y, width: note.width || 200, height: note.height || 200, backgroundColor: note.color }}>
+              <textarea className="w-full h-full bg-transparent resize-none outline-none font-handwriting text-lg text-gray-800 placeholder-gray-500/50" placeholder="Type here..." value={note.text} onChange={(e) => handleNoteChange(note.id, e.target.value)} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} />
+              <div
+                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <button onClick={() => handleNoteDelete(note.id)} className="p-1 hover:bg-black/10 rounded-full text-gray-600"><Trash2 className="w-4 h-4" /></button>
+              </div>
+            </div>
+          ))}
+          {textItems.map(item => (
+            <div key={item.id} className="absolute pointer-events-auto group min-w-[200px]" style={{ left: item.x, top: item.y }}>
+              <textarea className="w-full bg-transparent resize-none outline-none font-sans text-2xl font-medium leading-tight text-foreground bg-background/50 backdrop-blur-[1px] rounded-lg px-2 py-1 border border-transparent hover:border-border/50 focus:border-primary/50 transition-colors" placeholder="Type text..." value={item.text} onChange={(e) => { handleTextChange(item.id, e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }} style={{ color: item.color, height: 'auto', overflow: 'hidden' }} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} autoFocus />
+              <button onClick={() => handleTextDelete(item.id)} className="absolute -top-3 -right-3 p-1.5 bg-background border border-border rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 hover:text-destructive text-muted-foreground"><Trash2 className="w-3 h-3" /></button>
+            </div>
+          ))}
+        </div>
         <div ref={contentRef} className="absolute inset-0 z-0">
           <div className="absolute inset-0 bg-canvas-bg pointer-events-none -z-10" />
 
