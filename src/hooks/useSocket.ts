@@ -14,7 +14,7 @@ interface UseSocketOptions {
     onPointDrawn?: (data: { userId?: string; guestId?: string; point: { x: number; y: number }; strokeId: string; color: string; width: number }) => void;
     onCanvasCleared?: (data: { userId?: string; guestId?: string }) => void;
     onStrokeUndone?: (data: { userId?: string; guestId?: string }) => void;
-    onCanvasState?: (data: { strokes: any[]; croquis: any[]; }) => void;
+    onCanvasState?: (data: { strokes: any[]; croquis: any[]; stickyNotes?: any[]; textItems?: any[]; }) => void;
     onError?: (data: { message: string }) => void;
     onChatHistory?: (messages: any[]) => void;
     onReceiveMessage?: (message: any) => void;

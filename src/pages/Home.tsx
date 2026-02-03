@@ -1,4 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import html2canvas from 'html2canvas';
+import MeetingRenderer from '@/components/MeetingRenderer';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -39,6 +41,8 @@ const Home = () => {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editingTitle, setEditingTitle] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
+    const [downloadingMeeting, setDownloadingMeeting] = useState<Meeting | null>(null);
+    const [isGeneratingImage, setIsGeneratingImage] = useState(false);
 
     useEffect(() => {
         fetchMeetings();
@@ -114,31 +118,88 @@ const Home = () => {
 
     const handleDownload = async (e: React.MouseEvent, meeting: Meeting) => {
         e.stopPropagation();
+
+        if (meeting.thumbnail) {
+            try {
+                const link = document.createElement('a');
+                link.href = meeting.thumbnail;
+                link.download = `${meeting.title.replace(/\s+/g, '-').toLowerCase()}.jpg`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                toast({
+                    title: 'Downloaded',
+                    description: 'Meeting preview downloaded successfully',
+                });
+            } catch (error) {
+                toast({
+                    title: 'Error',
+                    description: 'Failed to download image',
+                    variant: 'destructive',
+                });
+            }
+        } else {
+            // Fallback: Generate image on demand
+            try {
+                setIsGeneratingImage(true);
+                toast({ title: "Generating Image", description: "Please wait..." });
+
+                // Fetch full meeting to ensure we have canvasData
+                let fullMeeting = meeting;
+                if (!meeting.canvasData) {
+                    try {
+                        fullMeeting = await meetingsAPI.getById(meeting._id);
+                    } catch (err) {
+                        // ignore, try with current data
+                    }
+                }
+
+                setDownloadingMeeting(fullMeeting);
+                // The MeetingRenderer will trigger onReady, which handles the download
+            } catch (error) {
+                setIsGeneratingImage(false);
+                toast({
+                    title: 'Error',
+                    description: 'Failed to access meeting data',
+                    variant: 'destructive',
+                });
+            }
+        }
+    };
+
+    const handleImageReady = useCallback(async (container: HTMLDivElement) => {
+        if (!downloadingMeeting) return;
+
         try {
-            // Create a JSON file with meeting data
-            const dataStr = JSON.stringify(meeting, null, 2);
-            const dataBlob = new Blob([dataStr], { type: 'application/json' });
-            const url = URL.createObjectURL(dataBlob);
+            const canvas = await html2canvas(container, {
+                scale: 1, // Already 1920x1080
+                useCORS: true,
+                backgroundColor: '#ffffff',
+                logging: false,
+            });
+
             const link = document.createElement('a');
-            link.href = url;
-            link.download = `${meeting.title}.json`;
-            document.body.appendChild(link);
+            link.download = `${downloadingMeeting.title.replace(/\s+/g, '-').toLowerCase()}.jpg`;
+            link.href = canvas.toDataURL('image/jpeg', 0.9);
             link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
 
             toast({
                 title: 'Downloaded',
-                description: 'Meeting data downloaded successfully',
+                description: 'Image generated and downloaded',
             });
-        } catch (error: any) {
+        } catch (error) {
+            console.error(error);
             toast({
                 title: 'Error',
-                description: 'Failed to download meeting',
+                description: 'Failed to generate image',
                 variant: 'destructive',
             });
+        } finally {
+            setDownloadingMeeting(null);
+            setIsGeneratingImage(false);
         }
-    };
+    }, [downloadingMeeting, toast]);
 
     const startEditing = (e: React.MouseEvent, meeting: Meeting) => {
         e.stopPropagation();
@@ -393,6 +454,21 @@ const Home = () => {
                         meetingId={selectedMeeting._id}
                         meetingTitle={selectedMeeting.title}
                     />
+                )}
+
+                {/* Hidden Renderer */}
+                {downloadingMeeting && downloadingMeeting.canvasData && (
+                    <div style={{ position: 'absolute', top: '-10000px', left: '-10000px', visibility: 'hidden' }}>
+                        <div id="hidden-renderer-container">
+                            <MeetingRenderer
+                                data={downloadingMeeting.canvasData}
+                                onReady={() => {
+                                    const el = document.getElementById('hidden-renderer-container');
+                                    if (el) handleImageReady(el as HTMLDivElement);
+                                }}
+                            />
+                        </div>
+                    </div>
                 )}
             </div>
         </div>

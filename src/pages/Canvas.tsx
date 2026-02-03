@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import html2canvas from 'html2canvas';
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useCanvas } from "@/hooks/useCanvas";
 import { useAuth } from "@/contexts/AuthContext";
@@ -42,6 +42,7 @@ const MOCK_MESSAGES: ChatMessage[] = [];
 
 const Canvas = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
   const { guestUser, isGuest } = useGuest();
   const isReadOnly = !isAuthenticated;
@@ -218,11 +219,11 @@ const Canvas = () => {
           fontSize: 24
         };
         setTextItems(prev => [...prev, newText]);
+        setTool('select');
         sendAddText({
           meetingId: meetingId || undefined,
           item: newText
         });
-        setTool('select');
       }
       return;
     }
@@ -457,7 +458,7 @@ const Canvas = () => {
     },
     onStickyAdded: (data) => {
       setStickyNotes(prev => {
-        if (prev.some(n => n.id === data.note.id)) return prev;
+        if (prev.some(note => note.id === data.note.id)) return prev;
         return [...prev, data.note];
       });
     },
@@ -469,7 +470,7 @@ const Canvas = () => {
     },
     onTextAdded: (data) => {
       setTextItems(prev => {
-        if (prev.some(t => t.id === data.item.id)) return prev;
+        if (prev.some(item => item.id === data.item.id)) return prev;
         return [...prev, data.item];
       });
     },
@@ -481,9 +482,15 @@ const Canvas = () => {
     },
     onCanvasState: (data) => {
       setInitialStrokes(data.strokes);
-      if (data.croquis) setCroquisItems(data.croquis);
-      if (data.stickyNotes) setStickyNotes(data.stickyNotes);
-      if (data.textItems) setTextItems(data.textItems);
+      if (data.croquis) {
+        setCroquisItems(data.croquis);
+      }
+      if (data.stickyNotes) {
+        setStickyNotes(data.stickyNotes);
+      }
+      if (data.textItems) {
+        setTextItems(data.textItems);
+      }
     },
   });
 
@@ -587,6 +594,23 @@ const Canvas = () => {
         logging: false,
       });
 
+      // Save thumbnail if owner
+      if (meetingId && isAuthenticated) {
+        try {
+          // Create smaller thumbnail
+          const thumbCanvas = await html2canvas(contentRef.current, {
+            scale: 0.2, // Smaller scale for thumbnail
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            logging: false,
+          });
+          const thumbnail = thumbCanvas.toDataURL('image/jpeg', 0.6);
+          await meetingsAPI.update(meetingId, { thumbnail });
+        } catch (err) {
+          console.error("Failed to update thumbnail", err);
+        }
+      }
+
       const link = document.createElement('a');
       link.download = `${sessionName.replace(/\s+/g, '-').toLowerCase()}.jpg`;
       link.href = canvas.toDataURL('image/jpeg', 0.9);
@@ -614,6 +638,24 @@ const Canvas = () => {
         </div>
       )}
 
+      <motion.header className={`absolute top-0 left-0 right-0 p-4 flex items-center justify-between z-40 pointer-events-none ${isReadOnly ? 'mt-10' : ''}`}>
+        <div className="flex items-center gap-4 pointer-events-auto bg-background/80 backdrop-blur-md border border-border/50 shadow-sm rounded-2xl px-3 py-2">
+          <button onClick={async () => {
+            if (meetingId && isAuthenticated && contentRef.current) {
+              try {
+                const thumbCanvas = await html2canvas(contentRef.current, {
+                  scale: 0.2,
+                  useCORS: true,
+                  backgroundColor: '#ffffff',
+                  logging: false,
+                });
+                const thumbnail = thumbCanvas.toDataURL('image/jpeg', 0.6);
+                await meetingsAPI.update(meetingId, { thumbnail });
+              } catch (e) { console.error(e); }
+            }
+            navigate(isAuthenticated ? "/home" : "/");
+          }} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden">
       <motion.header
         className={`h-14 px-4 flex items-center justify-between border-b border-[rgb(95,74,139)] backdrop-blur-sm z-20 ${isReadOnly ? 'mt-10' : ''}`}
         style={{ backgroundColor: 'rgba(95, 74, 139, 0.75)' }}
@@ -623,25 +665,29 @@ const Canvas = () => {
             <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden border-2 border-black/20">
               <img src={logo} alt="HiveBoard Logo" className="w-full h-full object-cover" />
             </div>
-          </Link>
-          <div className="h-6 w-px bg-border" />
+          </button>
+          <div className="h-5 w-px bg-border" />
           <div className="flex items-center gap-2">
             {isLoadingMeeting ? (
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                <span className="font-display font-semibold text-lg text-muted-foreground">Loading...</span>
+                <span className="font-display font-semibold text-sm text-muted-foreground">Loading...</span>
               </div>
             ) : (
-              <div className="flex items-center gap-2"><h1 className="font-display font-semibold text-lg">{sessionName}</h1>{isLocked && <Lock className="w-4 h-4 text-muted-foreground" />}</div>
+              <div className="flex items-center gap-2"><h1 className="font-display font-semibold text-sm select-none">{sessionName}</h1>{isLocked && <Lock className="w-3 h-3 text-muted-foreground" />}</div>
             )}
           </div>
         </div>
-        <UserPresence users={participants.map((p, i) => ({ id: p.userId || p.guestId || p.socketId, name: p.name, role: p.isOwner ? 'owner' : (p.userId ? 'editor' : 'viewer'), color: PRESENCE_COLORS[i % PRESENCE_COLORS.length], isOnline: true }))} currentUserId={user?._id || guestUser?.guestId || ''} onClick={() => setIsParticipantsListOpen(!isParticipantsListOpen)} />
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" className="gap-2" onClick={handleShare}><Share2 className="w-4 h-4" /> Share</Button>
-          <Button variant="ghost" size="icon-sm" onClick={handleExport}><Download className="w-4 h-4" /></Button>
-          <Button variant="ghost" size="icon-sm"><MoreHorizontal className="w-4 h-4" /></Button>
-          {!isAuthenticated && <Button variant="elegant" size="sm" asChild><Link to="/auth"><LogIn className="w-4 h-4" /> Sign In</Link></Button>}
+
+        <div className="pointer-events-auto bg-background/80 backdrop-blur-md border border-border/50 shadow-sm rounded-full p-1">
+          <UserPresence users={participants.map((p, i) => ({ id: p.userId || p.guestId || p.socketId, name: p.name, role: p.isOwner ? 'owner' : (p.userId ? 'editor' : 'viewer'), color: PRESENCE_COLORS[i % PRESENCE_COLORS.length], isOnline: true }))} currentUserId={user?._id || guestUser?.guestId || ''} onClick={() => setIsParticipantsListOpen(!isParticipantsListOpen)} />
+        </div>
+
+        <div className="flex items-center gap-1 pointer-events-auto bg-background/80 backdrop-blur-md border border-border/50 shadow-sm rounded-2xl px-2 py-1.5">
+          <Button variant="ghost" size="icon-sm" className="h-8 w-8" onClick={handleShare} title="Share"><Share2 className="w-4 h-4" /></Button>
+          <Button variant="ghost" size="icon-sm" className="h-8 w-8" onClick={handleExport} title="Export"><Download className="w-4 h-4" /></Button>
+          <Button variant="ghost" size="icon-sm" className="h-8 w-8"><MoreHorizontal className="w-4 h-4" /></Button>
+          {!isAuthenticated && <Button variant="elegant" size="sm" className="h-8 text-xs ml-2" asChild><Link to="/auth"><LogIn className="w-3 h-3 mr-1.5" /> Sign In</Link></Button>}
         </div>
       </motion.header>
 

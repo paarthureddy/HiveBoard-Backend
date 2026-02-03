@@ -4,7 +4,7 @@ import Message from './models/Message.js';
 
 export const setupSocketHandlers = (io) => {
     io.on('connection', (socket) => {
-        console.log(`✅ Client connected: ${socket.id}`);
+        console.log(` Client connected: ${socket.id}`);
 
         // Join a room
         socket.on('join-room', async (data) => {
