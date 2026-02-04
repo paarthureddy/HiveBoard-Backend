@@ -14,81 +14,111 @@ const initAI = () => {
 };
 
 router.post('/chat', async (req, res) => {
+    console.log('--- NEW AI REQUEST ---');
     try {
         const { message } = req.body || {};
-
-        // Detailed logging
-        console.log('📝 AI Request Received');
-        console.log('   Message:', message ? message.substring(0, 50) + '...' : 'NONE');
+        console.log('Message:', message);
 
         const apiKey = process.env.GOOGLE_API_KEY ? process.env.GOOGLE_API_KEY.trim() : null;
+        console.log('API Key present:', !!apiKey);
         if (!apiKey) {
-            console.error('❌ FATAL: GOOGLE_API_KEY is missing in environment variables');
-            return res.status(500).json({ message: 'Server configuration error: Missing API Key' });
+            return res.status(500).json({ message: 'Missing API Key' });
         }
-        console.log('   Key available:', apiKey.substring(0, 4) + '...');
 
         initAI();
-
-        if (!genAI) {
-            console.error('❌ FATAL: Failed to initialize GoogleGenerativeAI');
-            return res.status(500).json({ message: 'AI Client initialization failed' });
-        }
 
         if (!message) {
             return res.status(400).json({ message: 'Message is required' });
         }
 
-        // Try multiple models to ensure compatibility
-        // Verified: The following models are available for this key.
-        const modelsToTry = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro"];
+        const imageKeywords = ['generate', 'image', 'picture', 'draw', 'show me'];
+        const isImageRequest = imageKeywords.some(keyword => message.toLowerCase().includes(keyword));
+
+        const systemPrompt = isImageRequest
+            ? "Respond ONLY with a markdown image: ![IMAGE](https://pollinations.ai/p/{prompt}?width=1024&height=1024&nologo=true&model=turbo). Replace {prompt} with a descriptive, URL-encoded prompt based on the user request. No other text."
+            : "You are a helpful AI assistant for HiveBoard. Be concise (max 2 sentences).";
+
+        const modelsToTry = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-pro"];
 
         let resultText = "";
         let success = false;
-        let lastError = null;
-
-        const systemPrompt = "You are a helpful AI assistant for HiveBoard. Responses MUST be very brief and concise (max 2 sentences).";
 
         for (const modelName of modelsToTry) {
             try {
-                console.log(`🤖 Attempting model: ${modelName}`);
+                console.log(`🤖 Fetching from ${modelName}...`);
 
-                const modelConfig = { model: modelName };
-                // 1.5, 2.0, and 2.5 models support systemInstruction
-                if (modelName.includes('1.5') || modelName.includes('2.0') || modelName.includes('2.5')) {
-                    modelConfig.systemInstruction = systemPrompt;
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+                const apiResponse = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: `${systemPrompt}\n\nUser: ${message}` }] }]
+                    })
+                });
+
+                const data = await apiResponse.json();
+
+                if (data.candidates && data.candidates[0].content.parts[0].text) {
+                    resultText = data.candidates[0].content.parts[0].text;
+                    success = true;
+                    console.log(`✅ ${modelName} responded successfully.`);
+                    break;
+                } else if (data.error) {
+                    console.error(`❌ ${modelName} API Error:`, data.error.message);
+                } else {
+                    console.warn(`⚠️ ${modelName} returned unexpected structure:`, JSON.stringify(data).substring(0, 100));
                 }
-
-                const model = genAI.getGenerativeModel(modelConfig);
-
-                // Add brevity instruction to the message itself as a backup
-                const enhancedMessage = `[INSTRUCTION: Be extremely concise] ${message}`;
-                const result = await model.generateContent(enhancedMessage);
-                const response = await result.response;
-                resultText = response.text();
-
-                success = true;
-                console.log(`✅ Success with ${modelName}`);
-                break;
-            } catch (error) {
-                console.warn(`⚠️ Failed with ${modelName}:`, error.message);
-                lastError = error;
+            } catch (err) {
+                console.error(`❌ ${modelName} Request failed:`, err.message);
             }
         }
 
         if (success) {
+            // Detect if the model returned an image markdown even if Gemini was successful
+            if (resultText.includes('![IMAGE]')) {
+                const url = resultText.match(/\((.*?)\)/)?.[1];
+                console.log('🖼️ Gemini generated image URL:', url);
+                return res.json({ response: "I've generated this for you:", image: url });
+            }
             res.json({ response: resultText });
         } else {
-            console.error('❌ All models failed.');
-            throw lastError || new Error("All AI models failed.");
+            // If it's an image request, we construct the URL.
+            if (isImageRequest) {
+                let promptSubject = message.replace(/generate|aimage|image|picture|draw|show me|a /gi, '').replace(/\s+/g, ' ').trim();
+                if (promptSubject.toLowerCase().startsWith('of ')) promptSubject = promptSubject.substring(3);
+
+                const encodedPrompt = encodeURIComponent(promptSubject || 'creative art');
+                // Use gen.pollinations.ai which is their newer, more stable API
+                const imageUrl = `https://pollinations.ai/p/${encodedPrompt}?width=1024&height=1024&nologo=true&model=turbo&seed=${Math.floor(Math.random() * 100000)}`;
+                console.log('🖼️ Constructed direct image URL:', imageUrl);
+                return res.json({ response: "Generating image...", image: imageUrl });
+            }
+
+            console.log('🔄 Gemini fallback to Pollinations Text...');
+            try {
+                const pollinationsUrl = `https://text.pollinations.ai/${encodeURIComponent(message)}?system=${encodeURIComponent(systemPrompt)}`;
+                const pollResponse = await fetch(pollinationsUrl);
+
+                if (pollResponse.ok) {
+                    const pollText = await pollResponse.text();
+                    if (pollText && !pollText.includes('502 Bad Gateway') && !pollText.includes('error')) {
+                        console.log('✅ Pollinations fallback successful.');
+                        return res.json({ response: pollText });
+                    }
+                }
+            } catch (fallbackErr) {
+                console.error('❌ Fallback failed:', fallbackErr.message);
+            }
+
+            res.status(500).json({
+                message: 'HiveMind is currently overworking (Quota exceeded)',
+                details: 'Please try again in a few minutes.'
+            });
         }
 
     } catch (error) {
-        console.error('❌ AI Route Error:', error);
-        res.status(500).json({
-            message: 'Error processing AI request.',
-            details: error.message
-        });
+        console.error('❌ AI Error:', error);
+        res.status(500).json({ message: 'Error processing request', details: error.message });
     }
 });
 

@@ -16,6 +16,7 @@ export interface ChatMessage {
   userId: string;
   userName: string;
   content: string;
+  imageUrl?: string;
   timestamp: Date;
 }
 

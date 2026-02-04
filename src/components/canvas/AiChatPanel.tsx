@@ -13,8 +13,8 @@ interface AiChatPanelProps {
 const INITIAL_MESSAGE: ChatMessage = {
     id: 'welcome',
     userId: 'ai',
-    userName: 'AI Assistant',
-    content: 'Hello! I can help you with your design. What would you like to create?',
+    userName: 'HiveMind',
+    content: 'Hello! I am HiveMind. I can help you with your design. What would you like to create?',
     timestamp: new Date()
 };
 
@@ -71,8 +71,9 @@ const AiChatPanel = ({
                 const aiResponse: ChatMessage = {
                     id: crypto.randomUUID(),
                     userId: 'ai',
-                    userName: 'AI Assistant',
+                    userName: 'HiveMind',
                     content: data.response,
+                    imageUrl: data.image,
                     timestamp: new Date(),
                 };
                 setMessages(prev => [...prev, aiResponse]);
@@ -84,7 +85,7 @@ const AiChatPanel = ({
             const errorResponse: ChatMessage = {
                 id: crypto.randomUUID(),
                 userId: 'ai',
-                userName: 'AI Assistant',
+                userName: 'HiveMind',
                 content: error.message && !error.message.includes('object Object')
                     ? `⚠️ ${error.message}`
                     : "I'm sorry, I'm having a bit of trouble answering right now. Please try again in a moment.",
@@ -137,7 +138,7 @@ const AiChatPanel = ({
                                     <Sparkles className="w-4 h-4 text-violet-600 dark:text-violet-400" />
                                 </div>
                                 <div>
-                                    <h3 className="font-display font-semibold">AI Assistant</h3>
+                                    <h3 className="font-display font-semibold">HiveMind</h3>
                                     <p className="text-xs text-muted-foreground">Always active</p>
                                 </div>
                             </div>
@@ -177,7 +178,22 @@ const AiChatPanel = ({
                                                     : 'bg-muted rounded-bl-sm'
                                                     }`}
                                             >
-                                                {message.content}
+                                                <div className="flex flex-col gap-2">
+                                                    {message.content && <span>{message.content}</span>}
+                                                    {message.imageUrl && (
+                                                        <div className="relative group mt-1">
+                                                            <img
+                                                                src={message.imageUrl}
+                                                                alt="AI Generated"
+                                                                className="rounded-lg w-full h-auto shadow-sm hover:scale-[1.02] transition-transform bg-background/50 min-h-[100px]"
+                                                                loading="lazy"
+                                                                onError={(e) => {
+                                                                    (e.target as HTMLImageElement).src = 'https://placehold.co/400x400/6d28d9/ffffff?text=Image+Generating...';
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     </motion.div>
