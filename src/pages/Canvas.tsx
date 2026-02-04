@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Link, useLocation } from "react-router-dom";
+import html2canvas from 'html2canvas';
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useCanvas } from "@/hooks/useCanvas";
 import { useAuth } from "@/contexts/AuthContext";
 import { useGuest } from "@/contexts/GuestContext";
 import { useSocket } from "@/hooks/useSocket";
-import { joinRoom, leaveRoom, sendStroke, sendPoint, sendClearCanvas, sendUndo, requestCanvasState } from "@/lib/socket";
+import { joinRoom, leaveRoom, sendStroke, sendPoint, sendClearCanvas, sendUndo, requestCanvasState, sendMessage, sendAddCroquis, sendUpdateCroquis, sendAddSticky, sendUpdateSticky, sendDeleteSticky, sendAddText, sendUpdateText, sendDeleteText } from "@/lib/socket";
 import { meetingsAPI } from "@/lib/api";
 import Toolbar from "@/components/canvas/Toolbar";
 import ChatPanel from "@/components/canvas/ChatPanel";
@@ -37,14 +38,11 @@ import {
 } from "lucide-react";
 
 
-const MOCK_MESSAGES: ChatMessage[] = [
-  { id: '1', userId: '2', userName: 'Emma Chen', content: 'Love the new silhouette direction! 🎨', timestamp: new Date(Date.now() - 300000) },
-  { id: '2', userId: '1', userName: 'You', content: 'Thanks! Working on the sleeve details now.', timestamp: new Date(Date.now() - 240000) },
-  { id: '3', userId: '3', userName: 'Lucas M.', content: 'The fabric drape looks perfect', timestamp: new Date(Date.now() - 60000) },
-];
+const MOCK_MESSAGES: ChatMessage[] = [];
 
 const Canvas = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
   const { guestUser, isGuest } = useGuest();
   const isReadOnly = !isAuthenticated;
@@ -60,9 +58,26 @@ const Canvas = () => {
   const [croquisItems, setCroquisItems] = useState<CroquisItem[]>([]);
   const [selectedCroquisId, setSelectedCroquisId] = useState<string | null>(null);
 
+  const { setGuestUser } = useGuest();
+
+  // Auto-generate guest identity if not authenticated and not already a guest
+  useEffect(() => {
+    if (!isAuthenticated && !guestUser) {
+      const randomId = crypto.randomUUID();
+      setGuestUser({
+        guestId: randomId,
+        guestName: `Guest ${randomId.slice(0, 4)}`,
+        meetingId: meetingId || '',
+        roomId: roomIdParam || '',
+        role: 'guest'
+      });
+    }
+  }, [isAuthenticated, guestUser, setGuestUser, meetingId, roomIdParam]);
+
   const [stickyColor, setStickyColor] = useState('#fef3c7'); // Default yellow
   const overlayRef = useRef<HTMLDivElement>(null);
   const croquisLayerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   // Destructure new view controls
   const {
@@ -128,6 +143,7 @@ const Canvas = () => {
   const [roomId, setRoomId] = useState<string>('');
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [isParticipantsListOpen, setIsParticipantsListOpen] = useState(false);
 
   // Pan/Zoom State
   const [isPanning, setIsPanning] = useState(false);
@@ -181,6 +197,11 @@ const Canvas = () => {
           height: 200
         };
         setStickyNotes(prev => [...prev, newNote]);
+        setTool('select');
+        sendAddSticky({
+          meetingId: meetingId || undefined,
+          note: newNote
+        });
       }
       return;
     }
@@ -199,6 +220,10 @@ const Canvas = () => {
         };
         setTextItems(prev => [...prev, newText]);
         setTool('select');
+        sendAddText({
+          meetingId: meetingId || undefined,
+          item: newText
+        });
       }
       return;
     }
@@ -236,19 +261,37 @@ const Canvas = () => {
   // Sticky Note Actions
   const handleNoteChange = (id: string, text: string) => {
     setStickyNotes(prev => prev.map(n => n.id === id ? { ...n, text } : n));
+    sendUpdateSticky({
+      meetingId: meetingId || undefined,
+      id,
+      updates: { text }
+    });
   };
 
   const handleNoteDelete = (id: string) => {
     setStickyNotes(prev => prev.filter(n => n.id !== id));
+    sendDeleteSticky({
+      meetingId: meetingId || undefined,
+      id
+    });
   };
 
   // Text Actions
   const handleTextChange = (id: string, text: string) => {
     setTextItems(prev => prev.map(t => t.id === id ? { ...t, text } : t));
+    sendUpdateText({
+      meetingId: meetingId || undefined,
+      id,
+      updates: { text }
+    });
   };
 
   const handleTextDelete = (id: string) => {
     setTextItems(prev => prev.filter(t => t.id !== id));
+    sendDeleteText({
+      meetingId: meetingId || undefined,
+      id
+    });
   };
 
   // Croquis Actions
@@ -278,10 +321,23 @@ const Canvas = () => {
     setCroquisItems(prev => [...prev, newItem]);
     setSelectedCroquisId(newItem.id);
     setTool('select');
+
+    // Broadcast
+    sendAddCroquis({
+      meetingId: meetingId || undefined,
+      item: newItem
+    });
   };
 
   const updateCroquis = (id: string, updates: Partial<CroquisItem>) => {
     setCroquisItems(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+
+    // Broadcast
+    sendUpdateCroquis({
+      meetingId: meetingId || undefined,
+      id,
+      updates
+    });
   };
 
   // Native Event Listeners for Non-Passive behavior
@@ -369,7 +425,73 @@ const Canvas = () => {
     onPointDrawn: (data) => drawRemotePoint(data.point, data.strokeId, data.color, data.width),
     onCanvasCleared: () => clearCanvasRemote(),
     onStrokeUndone: () => undoRemote(),
-    onCanvasState: (data) => setInitialStrokes(data.strokes),
+    onChatHistory: (history) => {
+      setMessages(history.map((msg: any) => ({
+        id: msg._id,
+        userId: msg.userId || msg.guestId,
+        userName: msg.userName,
+        content: msg.content,
+        timestamp: new Date(msg.timestamp)
+      })));
+    },
+    onReceiveMessage: (msg: any) => {
+      setMessages(prev => {
+        // Dedup based on ID if necessary, mostly unlikely with randomUUID but DB has _id
+        if (prev.some(m => m.id === msg._id)) return prev;
+        return [...prev, {
+          id: msg._id,
+          userId: msg.userId || msg.guestId,
+          userName: msg.userName,
+          content: msg.content,
+          timestamp: new Date(msg.timestamp)
+        }];
+      });
+    },
+    onCroquisAdded: (data) => {
+      setCroquisItems(prev => {
+        if (prev.some(item => item.id === data.item.id)) return prev;
+        return [...prev, data.item];
+      });
+    },
+    onCroquisUpdated: (data) => {
+      setCroquisItems(prev => prev.map(c => c.id === data.id ? { ...c, ...data.updates } : c));
+    },
+    onStickyAdded: (data) => {
+      setStickyNotes(prev => {
+        if (prev.some(note => note.id === data.note.id)) return prev;
+        return [...prev, data.note];
+      });
+    },
+    onStickyUpdated: (data) => {
+      setStickyNotes(prev => prev.map(n => n.id === data.id ? { ...n, ...data.updates } : n));
+    },
+    onStickyDeleted: (data) => {
+      setStickyNotes(prev => prev.filter(n => n.id !== data.id));
+    },
+    onTextAdded: (data) => {
+      setTextItems(prev => {
+        if (prev.some(item => item.id === data.item.id)) return prev;
+        return [...prev, data.item];
+      });
+    },
+    onTextUpdated: (data) => {
+      setTextItems(prev => prev.map(t => t.id === data.id ? { ...t, ...data.updates } : t));
+    },
+    onTextDeleted: (data) => {
+      setTextItems(prev => prev.filter(t => t.id !== data.id));
+    },
+    onCanvasState: (data) => {
+      setInitialStrokes(data.strokes);
+      if (data.croquis) {
+        setCroquisItems(data.croquis);
+      }
+      if (data.stickyNotes) {
+        setStickyNotes(data.stickyNotes);
+      }
+      if (data.textItems) {
+        setTextItems(data.textItems);
+      }
+    },
   });
 
   // Fetch meeting data
@@ -444,23 +566,58 @@ const Canvas = () => {
   };
 
   const handleSendMessage = (content: string) => {
-    const newMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      userId: '1',
-      userName: user?.name || guestUser?.guestName || 'You',
-      content,
-      timestamp: new Date(),
-    };
-    setMessages(prev => [...prev, newMessage]);
+    sendMessage({
+      meetingId: meetingId || undefined,
+      userId: user?._id,
+      guestId: guestUser?.guestId,
+      name: user?.name || guestUser?.guestName || 'Anonymous',
+      content
+    });
   };
 
-  const handleExport = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const link = document.createElement('a');
-    link.download = `${sessionName.replace(/\s+/g, '-').toLowerCase()}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+  const handleExport = async () => {
+    // Clear selection to avoid capturing controls
+    setSelectedCroquisId(null);
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    if (!contentRef.current) return;
+
+    try {
+      // Use html2canvas to capture the entire composition
+      const canvas = await html2canvas(contentRef.current, {
+        scale: 2, // High resolution
+        useCORS: true, // Allow loading cross-origin images (if any)
+        backgroundColor: '#ffffff', // Force white background for JPG
+        logging: false,
+      });
+
+      // Save thumbnail if owner
+      if (meetingId && isAuthenticated) {
+        try {
+          // Create smaller thumbnail
+          const thumbCanvas = await html2canvas(contentRef.current, {
+            scale: 0.2, // Smaller scale for thumbnail
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            logging: false,
+          });
+          const thumbnail = thumbCanvas.toDataURL('image/jpeg', 0.6);
+          await meetingsAPI.update(meetingId, { thumbnail });
+        } catch (err) {
+          console.error("Failed to update thumbnail", err);
+        }
+      }
+
+      const link = document.createElement('a');
+      link.download = `${sessionName.replace(/\s+/g, '-').toLowerCase()}.jpg`;
+      link.href = canvas.toDataURL('image/jpeg', 0.9);
+      link.click();
+    } catch (error) {
+      console.error('Export failed:', error);
+    }
   };
 
   const handleShare = () => {
@@ -481,31 +638,56 @@ const Canvas = () => {
         </div>
       )}
 
-      <motion.header className={`h-14 px-4 flex items-center justify-between border-b border-border bg-card/80 backdrop-blur-sm z-20 ${isReadOnly ? 'mt-10' : ''}`}>
+      <motion.header className={`absolute top-0 left-0 right-0 p-4 flex items-center justify-between z-40 pointer-events-none ${isReadOnly ? 'mt-10' : ''}`}>
+        <div className="flex items-center gap-4 pointer-events-auto bg-background/80 backdrop-blur-md border border-border/50 shadow-sm rounded-2xl px-3 py-2">
+          <button onClick={async () => {
+            if (meetingId && isAuthenticated && contentRef.current) {
+              try {
+                const thumbCanvas = await html2canvas(contentRef.current, {
+                  scale: 0.2,
+                  useCORS: true,
+                  backgroundColor: '#ffffff',
+                  logging: false,
+                });
+                const thumbnail = thumbCanvas.toDataURL('image/jpeg', 0.6);
+                await meetingsAPI.update(meetingId, { thumbnail });
+              } catch (e) { console.error(e); }
+            }
+            navigate(isAuthenticated ? "/home" : "/");
+          }} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden">
+      <motion.header
+        className={`h-14 px-4 flex items-center justify-between border-b border-[rgb(95,74,139)] backdrop-blur-sm z-20 ${isReadOnly ? 'mt-10' : ''}`}
+        style={{ backgroundColor: 'rgba(95, 74, 139, 0.75)' }}
+      >
         <div className="flex items-center gap-4">
           <Link to={isAuthenticated ? "/home" : "/"} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden border-2 border-black/20">
               <img src={logo} alt="HiveBoard Logo" className="w-full h-full object-cover" />
             </div>
-          </Link>
-          <div className="h-6 w-px bg-border" />
+          </button>
+          <div className="h-5 w-px bg-border" />
           <div className="flex items-center gap-2">
             {isLoadingMeeting ? (
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                <span className="font-display font-semibold text-lg text-muted-foreground">Loading...</span>
+                <span className="font-display font-semibold text-sm text-muted-foreground">Loading...</span>
               </div>
             ) : (
-              <div className="flex items-center gap-2"><h1 className="font-display font-semibold text-lg">{sessionName}</h1>{isLocked && <Lock className="w-4 h-4 text-muted-foreground" />}</div>
+              <div className="flex items-center gap-2"><h1 className="font-display font-semibold text-sm select-none">{sessionName}</h1>{isLocked && <Lock className="w-3 h-3 text-muted-foreground" />}</div>
             )}
           </div>
         </div>
-        <UserPresence users={participants.map((p, i) => ({ id: p.userId || p.guestId || p.socketId, name: p.name, role: p.isOwner ? 'owner' : (p.userId ? 'editor' : 'viewer'), color: PRESENCE_COLORS[i % PRESENCE_COLORS.length], isOnline: true }))} currentUserId={user?._id || guestUser?.guestId || ''} />
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" className="gap-2" onClick={handleShare}><Share2 className="w-4 h-4" /> Share</Button>
-          <Button variant="ghost" size="icon-sm" onClick={handleExport}><Download className="w-4 h-4" /></Button>
-          <Button variant="ghost" size="icon-sm"><MoreHorizontal className="w-4 h-4" /></Button>
-          {!isAuthenticated && <Button variant="elegant" size="sm" asChild><Link to="/auth"><LogIn className="w-4 h-4" /> Sign In</Link></Button>}
+
+        <div className="pointer-events-auto bg-background/80 backdrop-blur-md border border-border/50 shadow-sm rounded-full p-1">
+          <UserPresence users={participants.map((p, i) => ({ id: p.userId || p.guestId || p.socketId, name: p.name, role: p.isOwner ? 'owner' : (p.userId ? 'editor' : 'viewer'), color: PRESENCE_COLORS[i % PRESENCE_COLORS.length], isOnline: true }))} currentUserId={user?._id || guestUser?.guestId || ''} onClick={() => setIsParticipantsListOpen(!isParticipantsListOpen)} />
+        </div>
+
+        <div className="flex items-center gap-1 pointer-events-auto bg-background/80 backdrop-blur-md border border-border/50 shadow-sm rounded-2xl px-2 py-1.5">
+          <Button variant="ghost" size="icon-sm" className="h-8 w-8" onClick={handleShare} title="Share"><Share2 className="w-4 h-4" /></Button>
+          <Button variant="ghost" size="icon-sm" className="h-8 w-8" onClick={handleExport} title="Export"><Download className="w-4 h-4" /></Button>
+          <Button variant="ghost" size="icon-sm" className="h-8 w-8"><MoreHorizontal className="w-4 h-4" /></Button>
+          {!isAuthenticated && <Button variant="elegant" size="sm" className="h-8 text-xs ml-2" asChild><Link to="/auth"><LogIn className="w-3 h-3 mr-1.5" /> Sign In</Link></Button>}
         </div>
       </motion.header>
 
@@ -520,7 +702,12 @@ const Canvas = () => {
           {stickyNotes.map(note => (
             <div key={note.id} className="absolute pointer-events-auto p-4 shadow-lg rounded-lg flex flex-col group" style={{ left: note.x, top: note.y, width: note.width || 200, height: note.height || 200, backgroundColor: note.color }}>
               <textarea className="w-full h-full bg-transparent resize-none outline-none font-handwriting text-lg text-gray-800 placeholder-gray-500/50" placeholder="Type here..." value={note.text} onChange={(e) => handleNoteChange(note.id, e.target.value)} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} />
-              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => handleNoteDelete(note.id)} className="p-1 hover:bg-black/10 rounded-full text-gray-600"><Trash2 className="w-4 h-4" /></button></div>
+              <div
+                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <button onClick={() => handleNoteDelete(note.id)} className="p-1 hover:bg-black/10 rounded-full text-gray-600"><Trash2 className="w-4 h-4" /></button>
+              </div>
             </div>
           ))}
           {textItems.map(item => (
@@ -530,70 +717,90 @@ const Canvas = () => {
             </div>
           ))}
         </div>
+        <div ref={contentRef} className="absolute inset-0 z-0">
+          <div className="absolute inset-0 bg-canvas-bg pointer-events-none -z-10" />
 
-        {/* Croquis Layer - Z-1 */}
-        <div ref={croquisLayerRef} className="absolute inset-0 pointer-events-none z-1" style={{ transformOrigin: '0 0' }}>
-          {croquisItems.map(item => (
-            <div key={item.id} className={`absolute group pointer-events-auto ${tool === 'select' ? 'cursor-move' : ''}`} style={{ left: item.x, top: item.y, width: item.width, height: item.height, opacity: item.opacity, transform: `scaleX(${item.isFlipped ? -1 : 1})` }}
-              onMouseDown={(e) => {
-                if (tool !== 'select' || item.isLocked) return;
-                if (e.button !== 0) return;
-                e.stopPropagation();
-                setSelectedCroquisId(item.id);
-                const startX = e.clientX;
-                const startY = e.clientY;
-                const startItemX = item.x;
-                const startItemY = item.y;
-                const onMove = (moveEvent: MouseEvent) => {
-                  const scale = scaleRef.current || 1;
-                  const dx = (moveEvent.clientX - startX) / scale;
-                  const dy = (moveEvent.clientY - startY) / scale;
-                  updateCroquis(item.id, { x: startItemX + dx, y: startItemY + dy });
-                };
-                const onUp = () => {
-                  window.removeEventListener('mousemove', onMove);
-                  window.removeEventListener('mouseup', onUp);
-                };
-                window.addEventListener('mousemove', onMove);
-                window.addEventListener('mouseup', onUp);
-              }}
-            >
-              <img src={item.src} className={`w-full h-full object-contain ${selectedCroquisId === item.id ? 'ring-2 ring-primary ring-offset-2 rounded-lg' : ''}`} draggable={false} alt="Croquis" />
-              {selectedCroquisId === item.id && (
-                <div className="absolute -top-14 left-1/2 -translate-x-1/2 bg-popover/95 backdrop-blur border border-border rounded-xl shadow-xl flex items-center p-1.5 gap-2 z-50 pointer-events-auto min-w-[300px]" style={{ transform: `scaleX(${item.isFlipped ? -1 : 1})` }} onMouseDown={e => e.stopPropagation()}>
-                  <div className="w-24 px-2 flex items-center gap-2"><Eye className="w-3 h-3 text-muted-foreground" /><Slider value={[item.opacity]} min={0.1} max={1} step={0.1} onValueChange={([v]) => updateCroquis(item.id, { opacity: v })} className="flex-1" /></div>
-                  <div className="h-4 w-px bg-border" />
-                  <button onClick={() => updateCroquis(item.id, { isLocked: !item.isLocked })} className={cn("p-1.5 hover:bg-muted rounded-lg transition-colors", item.isLocked && "text-destructive bg-destructive/10")} title="Lock">{item.isLocked ? <Lock className="w-4 h-4" /> : <LockOpen className="w-4 h-4" />}</button>
-                  <button onClick={() => updateCroquis(item.id, { isFlipped: !item.isFlipped })} className={cn("p-1.5 hover:bg-muted rounded-lg transition-colors", item.isFlipped && "bg-muted text-primary")} title="Flip Horizontal"><FlipHorizontal className="w-4 h-4" /></button>
-                  <button onClick={() => { const newItem = { ...item, id: crypto.randomUUID(), x: item.x + 30, y: item.y + 30 }; setCroquisItems(prev => [...prev, newItem]); setSelectedCroquisId(newItem.id); }} className="p-1.5 hover:bg-muted rounded-lg transition-colors" title="Duplicate"><Copy className="w-4 h-4" /></button>
-                  <div className="h-4 w-px bg-border" />
-                  <button onClick={() => {
-                    const dpr = window.devicePixelRatio || 1;
-                    const canvasWidth = canvasRef.current ? canvasRef.current.width / dpr : window.innerWidth;
-                    const canvasHeight = canvasRef.current ? canvasRef.current.height / dpr : window.innerHeight;
-                    if (!offsetRef.current) return;
-                    const viewCenterX = -offsetRef.current.x / scale + (canvasWidth / scale / 2);
-                    const viewCenterY = -offsetRef.current.y / scale + (canvasHeight / scale / 2);
-                    updateCroquis(item.id, { x: viewCenterX - item.width / 2, y: viewCenterY - item.height / 2 });
-                  }} className="p-1.5 hover:bg-muted rounded-lg transition-colors" title="Snap to Center"><AlignCenter className="w-4 h-4" /></button>
-                  <button onClick={() => updateCroquis(item.id, { width: 300, height: 600 })} className="p-1.5 hover:bg-muted rounded-lg transition-colors" title="Reset Scale"><Maximize2 className="w-4 h-4" /></button>
-                </div>
-              )}
-            </div>
-          ))}
+          {/* HTML Overlay (Stickies/Text) - Z-20 */}
+          <div ref={overlayRef} className="absolute inset-0 pointer-events-none z-20" style={{ transformOrigin: '0 0' }}>
+            {stickyNotes.map(note => (
+              <div key={note.id} className="absolute pointer-events-auto p-4 shadow-lg rounded-lg flex flex-col group" style={{ left: note.x, top: note.y, width: note.width || 200, height: note.height || 200, backgroundColor: note.color }}>
+                <textarea className="w-full h-full bg-transparent resize-none outline-none font-handwriting text-lg text-gray-800 placeholder-gray-500/50" placeholder="Type here..." value={note.text} onChange={(e) => handleNoteChange(note.id, e.target.value)} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} />
+                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => handleNoteDelete(note.id)} className="p-1 hover:bg-black/10 rounded-full text-gray-600"><Trash2 className="w-4 h-4" /></button></div>
+              </div>
+            ))}
+            {textItems.map(item => (
+              <div key={item.id} className="absolute pointer-events-auto group min-w-[200px]" style={{ left: item.x, top: item.y }}>
+                <textarea className="w-full resize-none outline-none font-sans text-2xl font-medium leading-tight text-foreground bg-background/50 backdrop-blur-[1px] rounded-lg px-2 py-1 border border-transparent hover:border-border/50 focus:border-primary/50 transition-colors" placeholder="Type text..." value={item.text} onChange={(e) => { handleTextChange(item.id, e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }} style={{ color: item.color, height: 'auto', overflow: 'hidden' }} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} autoFocus />
+                <button onClick={() => handleTextDelete(item.id)} className="absolute -top-3 -right-3 p-1.5 bg-background border border-border rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 hover:text-destructive text-muted-foreground"><Trash2 className="w-3 h-3" /></button>
+              </div>
+            ))}
+          </div>
+
+          {/* Croquis Layer - Z-1 */}
+          <div ref={croquisLayerRef} className="absolute inset-0 pointer-events-none z-1" style={{ transformOrigin: '0 0' }}>
+            {croquisItems.map(item => (
+              <div key={item.id} className={`absolute group pointer-events-auto ${tool === 'select' ? 'cursor-move' : ''}`} style={{ left: item.x, top: item.y, width: item.width, height: item.height, opacity: item.opacity, transform: `scaleX(${item.isFlipped ? -1 : 1})` }}
+                onMouseDown={(e) => {
+                  if (tool !== 'select' || item.isLocked) return;
+                  if (e.button !== 0) return;
+                  e.stopPropagation();
+                  setSelectedCroquisId(item.id);
+                  const startX = e.clientX;
+                  const startY = e.clientY;
+                  const startItemX = item.x;
+                  const startItemY = item.y;
+                  const onMove = (moveEvent: MouseEvent) => {
+                    const scale = scaleRef.current || 1;
+                    const dx = (moveEvent.clientX - startX) / scale;
+                    const dy = (moveEvent.clientY - startY) / scale;
+                    updateCroquis(item.id, { x: startItemX + dx, y: startItemY + dy });
+                  };
+                  const onUp = () => {
+                    window.removeEventListener('mousemove', onMove);
+                    window.removeEventListener('mouseup', onUp);
+                  };
+                  window.addEventListener('mousemove', onMove);
+                  window.addEventListener('mouseup', onUp);
+                }}
+              >
+                <img src={item.src} className={`w-full h-full object-contain ${selectedCroquisId === item.id ? 'ring-2 ring-primary ring-offset-2 rounded-lg' : ''}`} draggable={false} alt="Croquis" />
+                {selectedCroquisId === item.id && (
+                  <div className="absolute -top-14 left-1/2 -translate-x-1/2 bg-popover/95 backdrop-blur border border-border rounded-xl shadow-xl flex items-center p-1.5 gap-2 z-50 pointer-events-auto min-w-[300px]" style={{ transform: `scaleX(${item.isFlipped ? -1 : 1})` }} onMouseDown={e => e.stopPropagation()}>
+                    <div className="w-24 px-2 flex items-center gap-2"><Eye className="w-3 h-3 text-muted-foreground" /><Slider value={[item.opacity]} min={0.1} max={1} step={0.1} onValueChange={([v]) => updateCroquis(item.id, { opacity: v })} className="flex-1" /></div>
+                    <div className="h-4 w-px bg-border" />
+                    <button onClick={() => updateCroquis(item.id, { isLocked: !item.isLocked })} className={cn("p-1.5 hover:bg-muted rounded-lg transition-colors", item.isLocked && "text-destructive bg-destructive/10")} title="Lock">{item.isLocked ? <Lock className="w-4 h-4" /> : <LockOpen className="w-4 h-4" />}</button>
+                    <button onClick={() => updateCroquis(item.id, { isFlipped: !item.isFlipped })} className={cn("p-1.5 hover:bg-muted rounded-lg transition-colors", item.isFlipped && "bg-muted text-primary")} title="Flip Horizontal"><FlipHorizontal className="w-4 h-4" /></button>
+                    <button onClick={() => { const newItem = { ...item, id: crypto.randomUUID(), x: item.x + 30, y: item.y + 30 }; setCroquisItems(prev => [...prev, newItem]); setSelectedCroquisId(newItem.id); }} className="p-1.5 hover:bg-muted rounded-lg transition-colors" title="Duplicate"><Copy className="w-4 h-4" /></button>
+                    <div className="h-4 w-px bg-border" />
+                    <button onClick={() => {
+                      const dpr = window.devicePixelRatio || 1;
+                      const canvasWidth = canvasRef.current ? canvasRef.current.width / dpr : window.innerWidth;
+                      const canvasHeight = canvasRef.current ? canvasRef.current.height / dpr : window.innerHeight;
+                      if (!offsetRef.current) return;
+                      const viewCenterX = -offsetRef.current.x / scale + (canvasWidth / scale / 2);
+                      const viewCenterY = -offsetRef.current.y / scale + (canvasHeight / scale / 2);
+                      updateCroquis(item.id, { x: viewCenterX - item.width / 2, y: viewCenterY - item.height / 2 });
+                    }} className="p-1.5 hover:bg-muted rounded-lg transition-colors" title="Snap to Center"><AlignCenter className="w-4 h-4" /></button>
+                    <button onClick={() => updateCroquis(item.id, { width: 300, height: 600 })} className="p-1.5 hover:bg-muted rounded-lg transition-colors" title="Reset Scale"><Maximize2 className="w-4 h-4" /></button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <motion.div className="absolute inset-0 pointer-events-none">
+            {/* Grid Canvas - Z-0 */}
+            <canvas ref={gridCanvasRef} className="absolute inset-0 pointer-events-none z-0" />
+            {/* Main Drawing Canvas - Z-10 */}
+            <canvas ref={canvasRef} className={`w-full h-full touch-none ${tool === 'select' ? 'pointer-events-none' : (isPanning || isSpacePressed ? 'cursor-grab active:cursor-grabbing' : isReadOnly ? 'cursor-not-allowed' : 'cursor-crosshair')}`} />
+          </motion.div>
+
         </div>
-
-        <motion.div className="absolute inset-0 pointer-events-none">
-          {/* Grid Canvas - Z-0 */}
-          <canvas ref={gridCanvasRef} className="absolute inset-0 pointer-events-none z-0" />
-          {/* Main Drawing Canvas - Z-10 */}
-          <canvas ref={canvasRef} className={`w-full h-full touch-none ${tool === 'select' ? 'pointer-events-none' : (isPanning || isSpacePressed ? 'cursor-grab active:cursor-grabbing' : isReadOnly ? 'cursor-not-allowed' : 'cursor-crosshair')}`} />
-        </motion.div>
 
         <div className="absolute top-4 right-4 bg-card/80 backdrop-blur-sm border border-border rounded-full px-3 py-1.5 text-xs font-mono text-muted-foreground select-none pointer-events-none z-30">{(scale * 100).toFixed(0)}%</div>
 
         <Toolbar tool={tool} setTool={(newTool) => { if (!handleEditAttempt()) return; setTool(newTool); }} brushColor={brushColor} setBrushColor={(color) => { if (!handleEditAttempt()) return; setBrushColor(color); }} brushWidth={brushWidth} setBrushWidth={(width) => { if (!handleEditAttempt()) return; setBrushWidth(width); }} stickyColor={stickyColor} setStickyColor={setStickyColor} onUndo={handleUndo} onClear={handleClearCanvas} onAddCroquis={handleAddCroquis} />
-        {participants.length > 0 && <ParticipantsList participants={participants} currentUserId={user?._id} currentGuestId={guestUser?.guestId} />}
+        <ParticipantsList participants={participants} currentUserId={user?._id} currentGuestId={guestUser?.guestId} isOpen={isParticipantsListOpen} onClose={() => setIsParticipantsListOpen(false)} />
         <ChatPanel messages={messages} users={participants.map((p, i) => ({ id: p.userId || p.guestId || p.socketId, name: p.name, role: p.isOwner ? 'owner' : (p.userId ? 'editor' : 'viewer'), color: PRESENCE_COLORS[i % PRESENCE_COLORS.length], isOnline: true }))} currentUserId={user?._id || guestUser?.guestId || ''} onSendMessage={handleSendMessage} isOpen={isChatOpen} onToggle={() => { setIsChatOpen(!isChatOpen); if (!isChatOpen) setIsAiChatOpen(false); }} />
         <AiChatPanel isOpen={isAiChatOpen} onToggle={() => { setIsAiChatOpen(!isAiChatOpen); if (!isAiChatOpen) setIsChatOpen(false); }} />
       </div>

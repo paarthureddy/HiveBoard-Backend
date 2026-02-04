@@ -15,7 +15,7 @@ export const FloatingDock = ({
     desktopClassName,
     mobileClassName,
 }: {
-    items: { title: string; icon: React.ReactNode; href?: string; onClick?: () => void }[];
+    items: { title: string; icon: React.ReactNode; href?: string; onClick?: () => void; disableMagnification?: boolean }[];
     desktopClassName?: string;
     mobileClassName?: string;
 }) => {
@@ -31,7 +31,7 @@ const FloatingDockMobile = ({
     items,
     className,
 }: {
-    items: { title: string; icon: React.ReactNode; href?: string; onClick?: () => void }[];
+    items: { title: string; icon: React.ReactNode; href?: string; onClick?: () => void; disableMagnification?: boolean }[];
     className?: string;
 }) => {
     const [open, setOpen] = useState(false);
@@ -86,7 +86,7 @@ const FloatingDockDesktop = ({
     items,
     className,
 }: {
-    items: { title: string; icon: React.ReactNode; href?: string; onClick?: () => void }[];
+    items: { title: string; icon: React.ReactNode; href?: string; onClick?: () => void; disableMagnification?: boolean }[];
     className?: string;
 }) => {
     let mouseX = useMotionValue(Infinity);
@@ -112,12 +112,14 @@ function IconContainer({
     icon,
     href,
     onClick,
+    disableMagnification,
 }: {
     mouseX: MotionValue;
     title: string;
     icon: React.ReactNode;
     href?: string;
     onClick?: () => void;
+    disableMagnification?: boolean;
 }) {
     let ref = useRef<HTMLDivElement>(null);
 
@@ -127,8 +129,8 @@ function IconContainer({
         return val - bounds.x - bounds.width / 2;
     });
 
-    let widthTransform = useTransform(distance, [-120, 0, 120], [35, 70, 35]);
-    let heightTransform = useTransform(distance, [-120, 0, 120], [35, 70, 35]);
+    let widthTransform = useTransform(distance, [-120, 0, 120], disableMagnification ? [40, 40, 40] : [35, 70, 35]);
+    let heightTransform = useTransform(distance, [-120, 0, 120], disableMagnification ? [40, 40, 40] : [35, 70, 35]);
 
     let width = useSpring(widthTransform, {
         mass: 0.1,
@@ -141,7 +143,7 @@ function IconContainer({
         damping: 12,
     });
 
-    let iconScale = useTransform(distance, [-120, 0, 120], [1, 1.4, 1]);
+    let iconScale = useTransform(distance, [-120, 0, 120], disableMagnification ? [1, 1, 1] : [1, 1.4, 1]);
     let scale = useSpring(iconScale, {
         mass: 0.1,
         stiffness: 150,

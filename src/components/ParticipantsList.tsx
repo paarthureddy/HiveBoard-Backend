@@ -8,14 +8,17 @@ interface ParticipantsListProps {
     participants: Participant[];
     currentUserId?: string;
     currentGuestId?: string;
+    isOpen: boolean;
+    onClose: () => void;
 }
 
 const ParticipantsList: React.FC<ParticipantsListProps> = ({
     participants,
     currentUserId,
     currentGuestId,
+    isOpen,
+    onClose,
 }) => {
-    const [isExpanded, setIsExpanded] = useState(true);
 
     const getInitials = (name: string) => {
         return name
@@ -49,101 +52,105 @@ const ParticipantsList: React.FC<ParticipantsListProps> = ({
     };
 
     return (
-        <div className="fixed right-4 top-20 z-40 w-64">
-            <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="bg-card border border-border rounded-xl shadow-elevated overflow-hidden"
-            >
-                {/* Header */}
-                <button
-                    onClick={() => setIsExpanded(!isExpanded)}
-                    className="w-full px-4 py-3 flex items-center justify-between bg-muted/50 hover:bg-muted transition-colors"
-                >
-                    <div className="flex items-center gap-2">
-                        <Users className="w-4 h-4 text-primary" />
-                        <span className="font-semibold text-sm">
-                            Participants ({participants.length})
-                        </span>
-                    </div>
+        <AnimatePresence>
+            {isOpen && (
+                <>
+                    {/* Backdrop */}
                     <motion.div
-                        animate={{ rotate: isExpanded ? 180 : 0 }}
-                        transition={{ duration: 0.2 }}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={onClose}
+                        className="fixed inset-0 bg-background/20 backdrop-blur-sm z-40"
+                    />
+
+                    {/* Drawer */}
+                    <motion.div
+                        initial={{ x: '100%' }}
+                        animate={{ x: 0 }}
+                        exit={{ x: '100%' }}
+                        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                        className="fixed top-0 right-0 h-full w-80 bg-card border-l border-border shadow-elevated z-50 flex flex-col"
                     >
-                        ▼
-                    </motion.div>
-                </button>
-
-                {/* Participants List */}
-                <AnimatePresence>
-                    {isExpanded && (
-                        <motion.div
-                            initial={{ height: 0 }}
-                            animate={{ height: 'auto' }}
-                            exit={{ height: 0 }}
-                            transition={{ duration: 0.2 }}
-                            className="overflow-hidden"
-                        >
-                            <div className="p-2 max-h-96 overflow-y-auto">
-                                {participants.map((participant) => (
-                                    <motion.div
-                                        key={participant.socketId}
-                                        initial={{ opacity: 0, y: -10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, y: -10 }}
-                                        className={`flex items-center gap-3 p-2 rounded-lg mb-1 ${isCurrentUser(participant)
-                                                ? 'bg-primary/10 border border-primary/20'
-                                                : 'hover:bg-muted/50'
-                                            }`}
-                                    >
-                                        {/* Avatar */}
-                                        <div className="relative">
-                                            <div
-                                                className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold ${getAvatarColor(
-                                                    participant.userId || participant.guestId || participant.socketId
-                                                )}`}
-                                            >
-                                                {getInitials(participant.name)}
-                                            </div>
-                                            {/* Online indicator */}
-                                            <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-card" />
-                                        </div>
-
-                                        {/* Name and role */}
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-1">
-                                                <span className="text-sm font-medium truncate">
-                                                    {participant.name}
-                                                    {isCurrentUser(participant) && (
-                                                        <span className="text-xs text-muted-foreground ml-1">(You)</span>
-                                                    )}
-                                                </span>
-                                                {participant.isOwner && (
-                                                    <Crown className="w-3 h-3 text-yellow-500 flex-shrink-0" />
-                                                )}
-                                            </div>
-                                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                                {participant.userId ? (
-                                                    <UserCircle className="w-3 h-3" />
-                                                ) : (
-                                                    <span className="text-xs">Guest</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </motion.div>
-                                ))}
-
-                                {participants.length === 0 && (
-                                    <div className="text-center py-8 text-muted-foreground text-sm">
-                                        No participants yet
-                                    </div>
-                                )}
+                        {/* Header */}
+                        <div className="flex items-center justify-between p-4 border-b border-border bg-muted/30">
+                            <div className="flex items-center gap-2">
+                                <Users className="w-5 h-5 text-primary" />
+                                <h2 className="font-semibold text-lg">Participants</h2>
+                                <span className="bg-primary/10 text-primary text-xs px-2 py-0.5 rounded-full font-medium">
+                                    {participants.length}
+                                </span>
                             </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-            </motion.div>
-        </div>
+                            <Button variant="ghost" size="icon-sm" onClick={onClose}>
+                                <div className="i-lucide-x w-4 h-4">✕</div>
+                            </Button>
+                        </div>
+
+                        {/* List */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                            {participants.map((participant) => (
+                                <motion.div
+                                    key={participant.socketId}
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${isCurrentUser(participant)
+                                        ? 'bg-primary/5 border border-primary/20'
+                                        : 'hover:bg-muted/50 border border-transparent hover:border-border'
+                                        }`}
+                                >
+                                    {/* Avatar */}
+                                    <div className="relative">
+                                        <div
+                                            className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-semibold shadow-sm ${getAvatarColor(
+                                                participant.userId || participant.guestId || participant.socketId
+                                            )}`}
+                                        >
+                                            {getInitials(participant.name)}
+                                        </div>
+                                        <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-card" />
+                                    </div>
+
+                                    {/* Info */}
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="font-medium truncate text-sm">
+                                                {participant.name}
+                                            </span>
+                                            {isCurrentUser(participant) && (
+                                                <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full font-medium">You</span>
+                                            )}
+                                            {participant.isOwner && (
+                                                <Crown className="w-3.5 h-3.5 text-amber-500 fill-amber-500/20" />
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                            {participant.userId ? (
+                                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                                    <UserCircle className="w-3 h-3" />
+                                                    <span>Registered User</span>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                                    <div className="w-3 h-3 rounded-full border border-current opacity-50" />
+                                                    <span>Guest</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            ))}
+
+                            {participants.length === 0 && (
+                                <div className="flex flex-col items-center justify-center h-40 text-muted-foreground text-sm gap-2">
+                                    <Users className="w-8 h-8 opacity-20" />
+                                    <p>No participants yet</p>
+                                </div>
+                            )}
+                        </div>
+                    </motion.div>
+                </>
+            )}
+        </AnimatePresence>
     );
 };
 

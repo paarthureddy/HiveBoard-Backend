@@ -24,6 +24,7 @@ import f3 from "@/assets/Croquis Library/f3.png";
 import f4 from "@/assets/Croquis Library/f4.png";
 import f5 from "@/assets/Croquis Library/f5.png";
 import mannequin from "@/assets/Croquis Library/mannequin.png";
+import mannequinIcon from "@/assets/mannequin_icon.svg";
 
 const CROQUIS_ASSETS = {
   female: [f1, f2, f3, f4, f5],
@@ -224,7 +225,7 @@ const CroquisPickerIcon = ({ onSelect }: { onSelect: (src: string) => void }) =>
           </div>
         </div>
       </div>
-      <Shirt className="w-5 h-5 text-foreground group-hover:text-primary transition-colors" />
+      <img src={mannequinIcon} alt="Croquis" className="w-7 h-7 object-contain invert dark:invert-0 opacity-80 group-hover:opacity-100 transition-opacity" />
     </div>
   );
 };
@@ -305,6 +306,7 @@ const Toolbar = ({
       title: "Croquis",
       icon: <CroquisPickerIcon onSelect={onAddCroquis} />,
       onClick: () => { },
+      disableMagnification: true,
     },
     {
       title: "Select",
