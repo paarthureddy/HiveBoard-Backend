@@ -78,6 +78,7 @@ const Canvas = () => {
   const overlayRef = useRef<HTMLDivElement>(null);
   const croquisLayerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Destructure new view controls
   const {
@@ -342,36 +343,61 @@ const Canvas = () => {
 
   // Native Event Listeners for Non-Passive behavior
   const lastTouchPos = useRef<{ x: number, y: number } | null>(null);
+  const lastTouchDistance = useRef<number | null>(null);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const container = containerRef.current;
+    if (!container) return;
 
     const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
+      // Always prevent browser zoom
       if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
         const zoomSensitivity = -0.001;
         const delta = e.deltaY * zoomSensitivity;
-        const rect = canvas.getBoundingClientRect();
+
+        // Calculate center relative to the canvas container
+        const rect = container.getBoundingClientRect();
         const centerX = e.clientX - rect.left;
         const centerY = e.clientY - rect.top;
         zoom(delta, { x: centerX, y: centerY });
-      } else {
+        return;
+      }
+
+      // Panning - only if targeting canvas area
+      // We check if the target is likely the canvas or overlay, not a UI button/panel
+      const target = e.target as HTMLElement;
+      // Check if target is inside a scrollable container in the UI (e.g. chat messages)
+      const scrollable = target.closest('.overflow-y-auto');
+      if (scrollable) return; // Let default scroll happen
+
+      // If we are over the canvas area
+      if (target.tagName === 'CANVAS' || target === overlayRef.current || target === contentRef.current || target.classList.contains('bg-canvas-bg') || target === container) {
+        e.preventDefault();
         pan(-e.deltaX, -e.deltaY);
       }
     };
 
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 2) {
+        e.preventDefault(); // Prevent default immediately
         const t1 = e.touches[0];
         const t2 = e.touches[1];
         lastTouchPos.current = {
           x: (t1.clientX + t2.clientX) / 2,
           y: (t1.clientY + t2.clientY) / 2
         };
+        const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+        lastTouchDistance.current = dist;
         return;
       }
       lastTouchPos.current = null;
+      lastTouchDistance.current = null;
+
+      // If hitting UI, don't draw
+      const target = e.target as HTMLElement;
+      if (target.closest('button') || target.closest('.ui-panel')) return;
+
       if (isReadOnly) {
         setShowLoginPrompt(true);
         return;
@@ -380,17 +406,34 @@ const Canvas = () => {
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
+      // Always prevent default to stop scrolling/zooming the whole page
+      if (e.cancelable) e.preventDefault();
+
       if (e.touches.length === 2) {
         if (!lastTouchPos.current) return;
         const t1 = e.touches[0];
         const t2 = e.touches[1];
         const centerX = (t1.clientX + t2.clientX) / 2;
         const centerY = (t1.clientY + t2.clientY) / 2;
+
+        // Pan
         const dx = centerX - lastTouchPos.current.x;
         const dy = centerY - lastTouchPos.current.y;
         pan(dx, dy);
+
+        // Zoom
+        const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+        if (lastTouchDistance.current !== null && dist > 0) {
+          const currentScale = scaleRef.current || 1;
+          const ratio = dist / lastTouchDistance.current;
+          const delta = currentScale * (ratio - 1);
+
+          const rect = container.getBoundingClientRect();
+          zoom(delta, { x: centerX - rect.left, y: centerY - rect.top });
+        }
+
         lastTouchPos.current = { x: centerX, y: centerY };
+        lastTouchDistance.current = dist;
         return;
       }
       if (isReadOnly) return;
@@ -401,16 +444,16 @@ const Canvas = () => {
       stopDrawing();
     };
 
-    canvas.addEventListener('wheel', onWheel, { passive: false });
-    canvas.addEventListener('touchstart', onTouchStart, { passive: false });
-    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
-    canvas.addEventListener('touchend', onTouchEnd, { passive: false });
+    container.addEventListener('wheel', onWheel, { passive: false });
+    container.addEventListener('touchstart', onTouchStart, { passive: false });
+    container.addEventListener('touchmove', onTouchMove, { passive: false });
+    container.addEventListener('touchend', onTouchEnd, { passive: false });
 
     return () => {
-      canvas.removeEventListener('wheel', onWheel);
-      canvas.removeEventListener('touchstart', onTouchStart);
-      canvas.removeEventListener('touchmove', onTouchMove);
-      canvas.removeEventListener('touchend', onTouchEnd);
+      container.removeEventListener('wheel', onWheel);
+      container.removeEventListener('touchstart', onTouchStart);
+      container.removeEventListener('touchmove', onTouchMove);
+      container.removeEventListener('touchend', onTouchEnd);
     };
   }, [pan, zoom, startDrawing, draw, stopDrawing, isReadOnly]);
 
@@ -629,7 +672,7 @@ const Canvas = () => {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-canvas-bg overflow-hidden">
+    <div ref={containerRef} className="h-screen flex flex-col bg-canvas-bg overflow-hidden relative">
       {isReadOnly && (
         <div className="fixed top-0 left-0 right-0 z-50 bg-yellow-500/90 text-yellow-950 px-4 py-2 text-center text-sm font-medium">
           <Eye className="w-4 h-4 inline mr-2" />
@@ -639,7 +682,7 @@ const Canvas = () => {
       )}
 
       <motion.header className={`absolute top-0 left-0 right-0 p-4 flex items-center justify-between z-40 pointer-events-none ${isReadOnly ? 'mt-10' : ''}`}>
-        <div className="flex items-center gap-4 pointer-events-auto bg-background/80 backdrop-blur-md border border-border/50 shadow-sm rounded-2xl px-3 py-2">
+        <div className="flex items-center gap-4 pointer-events-auto backdrop-blur-md border border-[rgb(95,74,139)] shadow-sm rounded-2xl px-3 py-2" style={{ backgroundColor: 'rgba(95, 74, 139, 0.75)' }}>
           <button onClick={async () => {
             if (meetingId && isAuthenticated && contentRef.current) {
               try {
@@ -655,38 +698,31 @@ const Canvas = () => {
             }
             navigate(isAuthenticated ? "/home" : "/");
           }} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden">
-      <motion.header
-        className={`h-14 px-4 flex items-center justify-between border-b border-[rgb(95,74,139)] backdrop-blur-sm z-20 ${isReadOnly ? 'mt-10' : ''}`}
-        style={{ backgroundColor: 'rgba(95, 74, 139, 0.75)' }}
-      >
-        <div className="flex items-center gap-4">
-          <Link to={isAuthenticated ? "/home" : "/"} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden border-2 border-black/20">
               <img src={logo} alt="HiveBoard Logo" className="w-full h-full object-cover" />
             </div>
           </button>
-          <div className="h-5 w-px bg-border" />
+          <div className="h-5 w-px bg-[rgb(245,244,235)]/20" />
           <div className="flex items-center gap-2">
             {isLoadingMeeting ? (
               <div className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                <span className="font-display font-semibold text-sm text-muted-foreground">Loading...</span>
+                <Loader2 className="w-4 h-4 animate-spin text-[rgb(245,244,235)]" />
+                <span className="font-display font-semibold text-sm text-[rgb(245,244,235)]">Loading...</span>
               </div>
             ) : (
-              <div className="flex items-center gap-2"><h1 className="font-display font-semibold text-sm select-none">{sessionName}</h1>{isLocked && <Lock className="w-3 h-3 text-muted-foreground" />}</div>
+              <div className="flex items-center gap-2"><h1 className="font-display font-semibold text-sm select-none text-[rgb(255,212,29)]">{sessionName}</h1>{isLocked && <Lock className="w-3 h-3 text-[rgb(245,244,235)]" />}</div>
             )}
           </div>
         </div>
 
-        <div className="pointer-events-auto bg-background/80 backdrop-blur-md border border-border/50 shadow-sm rounded-full p-1">
+        <div className="pointer-events-auto backdrop-blur-md border border-[rgb(95,74,139)] shadow-sm rounded-full p-1" style={{ backgroundColor: 'rgba(95, 74, 139, 0.75)' }}>
           <UserPresence users={participants.map((p, i) => ({ id: p.userId || p.guestId || p.socketId, name: p.name, role: p.isOwner ? 'owner' : (p.userId ? 'editor' : 'viewer'), color: PRESENCE_COLORS[i % PRESENCE_COLORS.length], isOnline: true }))} currentUserId={user?._id || guestUser?.guestId || ''} onClick={() => setIsParticipantsListOpen(!isParticipantsListOpen)} />
         </div>
 
-        <div className="flex items-center gap-1 pointer-events-auto bg-background/80 backdrop-blur-md border border-border/50 shadow-sm rounded-2xl px-2 py-1.5">
-          <Button variant="ghost" size="icon-sm" className="h-8 w-8" onClick={handleShare} title="Share"><Share2 className="w-4 h-4" /></Button>
-          <Button variant="ghost" size="icon-sm" className="h-8 w-8" onClick={handleExport} title="Export"><Download className="w-4 h-4" /></Button>
-          <Button variant="ghost" size="icon-sm" className="h-8 w-8"><MoreHorizontal className="w-4 h-4" /></Button>
+        <div className="flex items-center gap-1 pointer-events-auto backdrop-blur-md border border-[rgb(95,74,139)] shadow-sm rounded-2xl px-2 py-1.5" style={{ backgroundColor: 'rgba(95, 74, 139, 0.75)' }}>
+          <Button variant="ghost" size="icon-sm" className="h-8 w-8 text-[rgb(245,244,235)] hover:text-white hover:bg-white/10" onClick={handleShare} title="Share"><Share2 className="w-4 h-4" /></Button>
+          <Button variant="ghost" size="icon-sm" className="h-8 w-8 text-[rgb(245,244,235)] hover:text-white hover:bg-white/10" onClick={handleExport} title="Export"><Download className="w-4 h-4" /></Button>
+          <Button variant="ghost" size="icon-sm" className="h-8 w-8 text-[rgb(245,244,235)] hover:text-white hover:bg-white/10"><MoreHorizontal className="w-4 h-4" /></Button>
           {!isAuthenticated && <Button variant="elegant" size="sm" className="h-8 text-xs ml-2" asChild><Link to="/auth"><LogIn className="w-3 h-3 mr-1.5" /> Sign In</Link></Button>}
         </div>
       </motion.header>
@@ -797,12 +833,16 @@ const Canvas = () => {
 
         </div>
 
-        <div className="absolute top-4 right-4 bg-card/80 backdrop-blur-sm border border-border rounded-full px-3 py-1.5 text-xs font-mono text-muted-foreground select-none pointer-events-none z-30">{(scale * 100).toFixed(0)}%</div>
+
 
         <Toolbar tool={tool} setTool={(newTool) => { if (!handleEditAttempt()) return; setTool(newTool); }} brushColor={brushColor} setBrushColor={(color) => { if (!handleEditAttempt()) return; setBrushColor(color); }} brushWidth={brushWidth} setBrushWidth={(width) => { if (!handleEditAttempt()) return; setBrushWidth(width); }} stickyColor={stickyColor} setStickyColor={setStickyColor} onUndo={handleUndo} onClear={handleClearCanvas} onAddCroquis={handleAddCroquis} />
         <ParticipantsList participants={participants} currentUserId={user?._id} currentGuestId={guestUser?.guestId} isOpen={isParticipantsListOpen} onClose={() => setIsParticipantsListOpen(false)} />
         <ChatPanel messages={messages} users={participants.map((p, i) => ({ id: p.userId || p.guestId || p.socketId, name: p.name, role: p.isOwner ? 'owner' : (p.userId ? 'editor' : 'viewer'), color: PRESENCE_COLORS[i % PRESENCE_COLORS.length], isOnline: true }))} currentUserId={user?._id || guestUser?.guestId || ''} onSendMessage={handleSendMessage} isOpen={isChatOpen} onToggle={() => { setIsChatOpen(!isChatOpen); if (!isChatOpen) setIsAiChatOpen(false); }} />
         <AiChatPanel isOpen={isAiChatOpen} onToggle={() => { setIsAiChatOpen(!isAiChatOpen); if (!isAiChatOpen) setIsChatOpen(false); }} />
+
+        <div className="fixed bottom-6 left-44 h-14 min-w-14 px-3 rounded-full bg-card/80 backdrop-blur-md border border-border shadow-elevated flex items-center justify-center text-sm font-semibold select-none z-40 text-foreground transition-all hover:scale-105 hover:bg-card">
+          {(scale * 100).toFixed(0)}%
+        </div>
       </div>
 
       <LoginPromptModal isOpen={showLoginPrompt} onClose={() => setShowLoginPrompt(false)} onSuccess={() => { setShowLoginPrompt(false); window.location.reload(); }} />
