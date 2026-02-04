@@ -35,6 +35,8 @@ import {
   FlipHorizontal,
   Maximize2,
   AlignCenter,
+  Minus,
+  Plus,
 } from "lucide-react";
 
 
@@ -353,7 +355,7 @@ const Canvas = () => {
       // Always prevent browser zoom
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
-        const zoomSensitivity = -0.001;
+        const zoomSensitivity = -0.003;
         const delta = e.deltaY * zoomSensitivity;
 
         // Calculate center relative to the canvas container
@@ -840,8 +842,34 @@ const Canvas = () => {
         <ChatPanel messages={messages} users={participants.map((p, i) => ({ id: p.userId || p.guestId || p.socketId, name: p.name, role: p.isOwner ? 'owner' : (p.userId ? 'editor' : 'viewer'), color: PRESENCE_COLORS[i % PRESENCE_COLORS.length], isOnline: true }))} currentUserId={user?._id || guestUser?.guestId || ''} onSendMessage={handleSendMessage} isOpen={isChatOpen} onToggle={() => { setIsChatOpen(!isChatOpen); if (!isChatOpen) setIsAiChatOpen(false); }} />
         <AiChatPanel isOpen={isAiChatOpen} onToggle={() => { setIsAiChatOpen(!isAiChatOpen); if (!isAiChatOpen) setIsChatOpen(false); }} />
 
-        <div className="fixed bottom-6 left-44 h-14 min-w-14 px-3 rounded-full bg-card/80 backdrop-blur-md border border-border shadow-elevated flex items-center justify-center text-sm font-semibold select-none z-40 text-foreground transition-all hover:scale-105 hover:bg-card">
-          {(scale * 100).toFixed(0)}%
+        <div className="fixed bottom-6 left-44 h-14 px-1.5 rounded-full bg-card/80 backdrop-blur-md border border-border shadow-elevated flex items-center gap-1 z-40 text-foreground transition-all hover:bg-card">
+          <button
+            onClick={() => {
+              const canvas = canvasRef.current;
+              if (canvas) {
+                const rect = canvas.getBoundingClientRect();
+                zoom(-0.1, { x: rect.width / 2, y: rect.height / 2 });
+              }
+            }}
+            className="w-10 h-10 rounded-full hover:bg-muted flex items-center justify-center transition-colors"
+          >
+            <Minus className="w-4 h-4" />
+          </button>
+          <div className="min-w-[3.5rem] text-center font-semibold text-sm select-none">
+            {(scale * 100).toFixed(0)}%
+          </div>
+          <button
+            onClick={() => {
+              const canvas = canvasRef.current;
+              if (canvas) {
+                const rect = canvas.getBoundingClientRect();
+                zoom(0.1, { x: rect.width / 2, y: rect.height / 2 });
+              }
+            }}
+            className="w-10 h-10 rounded-full hover:bg-muted flex items-center justify-center transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
