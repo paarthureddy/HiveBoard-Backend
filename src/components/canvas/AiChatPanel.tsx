@@ -206,9 +206,14 @@ const AiChatPanel = ({
                                                                 src={message.imageUrl}
                                                                 alt="AI Generated"
                                                                 className="rounded-lg w-full h-auto shadow-sm hover:scale-[1.02] transition-transform bg-background/50 min-h-[100px]"
-                                                                loading="lazy"
+                                                                loading="eager"
+                                                                onLoad={(e) => {
+                                                                    console.log('Image loaded successfully:', message.imageUrl);
+                                                                }}
                                                                 onError={(e) => {
-                                                                    (e.target as HTMLImageElement).src = 'https://placehold.co/400x400/6d28d9/ffffff?text=Image+Generating...';
+                                                                    console.error('Image failed to load:', message.imageUrl);
+                                                                    const img = e.target as HTMLImageElement;
+                                                                    img.src = 'https://placehold.co/400x400/6d28d9/ffffff?text=Image+Failed';
                                                                 }}
                                                             />
                                                         </div>

@@ -31,12 +31,18 @@ export const setupSocketHandlers = (io) => {
 
                 if (room) {
                     // Clean up stale connections (zombies from server restarts)
-                    if (io.sockets && io.sockets.sockets) {
+                    // DISABLED FOR DEBUGGING
+                    /* if (io.sockets && io.sockets.sockets) {
                         const connectedSocketIds = io.sockets.sockets; // Map of socketId -> Socket
+                        const initialCount = room.activeConnections.length;
                         room.activeConnections = room.activeConnections.filter(conn =>
                             connectedSocketIds.has(conn.socketId)
                         );
-                    }
+                        const finalCount = room.activeConnections.length;
+                        if (initialCount !== finalCount) {
+                            console.log(`🧹 Creating room: Removed ${initialCount - finalCount} stale connections`);
+                        }
+                    } */
                     // Add connection to active connections
                     room.addConnection({
                         socketId: socket.id,
@@ -71,11 +77,14 @@ export const setupSocketHandlers = (io) => {
                     // Get all active participants
                     const participants = room.activeConnections.map(conn => ({
                         socketId: conn.socketId,
-                        userId: conn.userId,
+                        userId: conn.userId ? conn.userId.toString() : null,
                         guestId: conn.guestId,
                         name: conn.name,
                         isOwner: conn.userId && conn.userId.toString() === room.owner.toString(),
                     }));
+
+                    console.log('📊 Active Connections in DB:', room.activeConnections.length);
+                    console.log('📋 Generated Participants List:', participants);
 
                     // Notify user they joined
                     socket.emit('room-joined', {
@@ -144,7 +153,7 @@ export const setupSocketHandlers = (io) => {
 
                     if (room) {
                         // Clean up stale connections here too
-                        if (io.sockets && io.sockets.sockets) {
+                        /* if (io.sockets && io.sockets.sockets) {
                             const connectedSocketIds = io.sockets.sockets;
                             let changed = false;
                             const initialLen = room.activeConnections.length;
@@ -154,7 +163,7 @@ export const setupSocketHandlers = (io) => {
                             if (room.activeConnections.length !== initialLen) {
                                 await room.save();
                             }
-                        }
+                        } */
 
                         const participants = room.activeConnections.map(conn => ({
                             socketId: conn.socketId,
@@ -526,6 +535,14 @@ export const setupSocketHandlers = (io) => {
         // Chat Messages
         socket.on('send-message', async (data) => {
             try {
+                console.log('📨 Received send-message event:', {
+                    roomId: socket.roomId,
+                    userId: data.userId,
+                    guestId: data.guestId,
+                    name: data.name,
+                    content: data.content
+                });
+
                 if (socket.roomId) {
                     const { content, meetingId, userId, guestId, name } = data;
 
@@ -538,8 +555,15 @@ export const setupSocketHandlers = (io) => {
                         content
                     });
 
+                    console.log('💾 Message saved to DB:', newMessage._id);
+                    console.log('📡 Broadcasting to room:', socket.roomId);
+
                     // Broadcast to everyone in room including sender (to confirm save)
                     io.to(socket.roomId).emit('receive-message', newMessage);
+
+                    console.log('✅ Message broadcast complete');
+                } else {
+                    console.error('❌ No roomId found for socket:', socket.id);
                 }
             } catch (error) {
                 console.error('Error sending message:', error);
