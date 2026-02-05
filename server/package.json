@@ -6,7 +6,8 @@
     "type": "module",
     "scripts": {
         "dev": "nodemon index.js",
-        "start": "node index.js"
+        "start": "node index.js",
+        "lint": "echo 'Linting not configured yet' && exit 0"
     },
     "keywords": [
         "express",

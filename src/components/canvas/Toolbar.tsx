@@ -114,7 +114,7 @@ const ColorPickerIcon = ({
     const y = e.clientY - centerY;
 
     // Calculate angle in degrees (0-360)
-    let angle = Math.atan2(y, x) * (180 / Math.PI);
+    const angle = Math.atan2(y, x) * (180 / Math.PI);
     let degrees = angle + 90; // Adjust for CSS 0deg at top
     if (degrees < 0) degrees += 360;
 
