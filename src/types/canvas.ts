@@ -1,5 +1,20 @@
 export type UserRole = 'owner' | 'editor' | 'viewer' | 'guest';
 
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export interface Stroke {
+  id: string;
+  points: Point[];
+  color: string;
+  width: number;
+  userId: string;
+  rotation?: number; // radians
+  center?: Point; // Pivot for rotation
+}
+
 export interface User {
   id: string;
   name: string;
@@ -28,6 +43,7 @@ export interface StickyNote {
   color: string;
   width?: number;
   height?: number;
+  rotation?: number;
 }
 
 export interface TextItem {
@@ -37,6 +53,7 @@ export interface TextItem {
   text: string;
   color: string;
   fontSize: number;
+  rotation?: number;
 }
 
 export interface CroquisItem {
@@ -49,6 +66,7 @@ export interface CroquisItem {
   opacity: number;
   isLocked: boolean;
   isFlipped: boolean;
+  rotation?: number;
 }
 
 export interface CanvasElement {

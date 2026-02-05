@@ -1,17 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 
-export interface Point {
-  x: number;
-  y: number;
-}
-
-export interface Stroke {
-  id: string;
-  points: Point[];
-  color: string;
-  width: number;
-  userId: string;
-}
+import { Stroke, Point } from '@/types/canvas';
 
 export interface UseCanvasOptions {
   onDrawStroke?: (stroke: Stroke) => void;
@@ -118,8 +107,8 @@ export const useCanvas = (options: UseCanvasOptions = {}) => {
     // (Caller usually verifies button, but we double check)
     if ('button' in e && (e.button === 1 || e.button === 2)) return;
 
-    // If Sticky tool or Text tool is active, don't draw strokes.
-    if (tool === 'sticky' || tool === 'text') return;
+    // If Sticky tool, Text tool, or Select tool is active, don't draw strokes.
+    if (tool === 'sticky' || tool === 'text' || tool === 'select') return;
 
     const point = getCanvasPoint(e);
     if (!point) return;
@@ -138,7 +127,7 @@ export const useCanvas = (options: UseCanvasOptions = {}) => {
 
   const draw = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     if (!isDrawing) return;
-    if (tool === 'sticky' || tool === 'text') return;
+    if (tool === 'sticky' || tool === 'text' || tool === 'select') return;
 
     const point = getCanvasPoint(e);
     if (!point) return;
@@ -159,7 +148,8 @@ export const useCanvas = (options: UseCanvasOptions = {}) => {
 
   const stopDrawing = useCallback(() => {
     if (!isDrawing || currentStroke.length === 0) return;
-    if (tool === 'sticky' || tool === 'text') return;
+    // If Sticky tool, Text tool, or Select tool is active, don't draw strokes.
+    if (tool === 'sticky' || tool === 'text' || tool === 'select') return;
 
     const newStroke: Stroke = {
       id: currentStrokeIdRef.current,
@@ -246,8 +236,19 @@ export const useCanvas = (options: UseCanvasOptions = {}) => {
     // }
 
     // Painting Helper
-    const paintStroke = (points: Point[], color: string, width: number) => {
+    const paintStroke = (stroke: Stroke) => {
+      const { points, color, width, rotation, center } = stroke;
       if (points.length < 2) return;
+
+      ctx.save();
+
+      // Apply rotation if present
+      if (rotation && center) {
+        ctx.translate(center.x, center.y);
+        ctx.rotate(rotation);
+        ctx.translate(-center.x, -center.y);
+      }
+
       ctx.beginPath();
 
       const isEraser = color === '#F8F6F3';
@@ -275,22 +276,29 @@ export const useCanvas = (options: UseCanvasOptions = {}) => {
       ctx.stroke();
 
       // Reset composite operation
-      ctx.globalCompositeOperation = 'source-over';
+      ctx.stroke();
+
+      // Reset composite operation
+      ctx.restore(); // Restore from rotation/style
     };
 
     // Draw Strokes
-    strokes.forEach(s => paintStroke(s.points, s.color, s.width));
-    remoteLivedStrokes.forEach(s => paintStroke(s.points, s.color, s.width));
+    strokes.forEach(s => paintStroke(s));
+    remoteLivedStrokes.forEach(s => paintStroke({ ...s, id: 'remote', userId: 'remote' } as Stroke)); // Casting for now/handling remote structure
 
-    // Draw Current Stroke
-    if (currentStroke.length > 0) {
-      // Logic for current stroke color
-      const color = tool === 'eraser' ? '#F8F6F3' : brushColor;
-      const width = tool === 'eraser' ? brushWidth * 5 : brushWidth; // Eraser visual feedback slightly larger? kept 3x or 5x
-      paintStroke(currentStroke, color, width);
-    }
-
+    // Logic for current stroke color
+    const color = tool === 'eraser' ? '#F8F6F3' : brushColor;
+    const width = tool === 'eraser' ? brushWidth * 5 : brushWidth;
+    // Temporary stroke object for rendering
+    paintStroke({
+      id: 'current',
+      userId: 'me',
+      points: currentStroke,
+      color,
+      width
+    });
     ctx.restore();
+
 
     // Sync View with HTML Layer
     if (onViewUpdate) {
@@ -408,6 +416,11 @@ export const useCanvas = (options: UseCanvasOptions = {}) => {
     requestRedrawRef.current();
   }, []);
 
+  const updateStroke = useCallback((id: string, updates: Partial<Stroke>) => {
+    setStrokes(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+    requestRedrawRef.current();
+  }, []);
+
   return {
     canvasRef,
     gridCanvasRef,
@@ -428,7 +441,10 @@ export const useCanvas = (options: UseCanvasOptions = {}) => {
     drawRemotePoint,
     clearCanvasRemote,
     undoRemote,
+
     setInitialStrokes,
+    updateStroke,
+    setStrokes,
 
     getCanvasPoint, // Exposed helper
 
