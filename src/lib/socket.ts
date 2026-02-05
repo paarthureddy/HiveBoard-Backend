@@ -137,6 +137,7 @@ export const sendMessage = (data: {
     name: string;
     content: string;
 }): void => {
+    console.log('📤 Sending message:', data);
     const socket = getSocket();
     socket.emit('send-message', data);
 };

@@ -99,13 +99,15 @@ router.post('/chat', async (req, res) => {
         } else {
             // If it's an image request, we construct the URL.
             if (isImageRequest) {
-                let promptSubject = message.replace(/generate|aimage|image|picture|draw|show me|a /gi, '').replace(/\s+/g, ' ').trim();
-                if (promptSubject.toLowerCase().startsWith('of ')) promptSubject = promptSubject.substring(3);
+                let promptSubject = message.replace(/generate|image|picture|draw|show me/gi, '').replace(/\s+/g, ' ').trim();
+                // Remove common filler words
+                promptSubject = promptSubject.replace(/^(an?|of|the)\s+/gi, '').trim();
 
                 const encodedPrompt = encodeURIComponent(promptSubject || 'creative art');
-                // Use gen.pollinations.ai which is their newer, more stable API
-                const imageUrl = `https://pollinations.ai/p/${encodedPrompt}?width=1024&height=1024&nologo=true&model=turbo&seed=${Math.floor(Math.random() * 100000)}`;
-                console.log('🖼️ Constructed direct image URL:', imageUrl);
+                // Fixed typo: nologo (not nologgo)
+                const pollinationsUrl = `https://pollinations.ai/p/${encodedPrompt}?width=1024&height=1024&nologo=true&model=turbo&seed=${Math.floor(Math.random() * 100000)}`;
+                const imageUrl = `/api/ai/image-proxy?url=${encodeURIComponent(pollinationsUrl)}`;
+                console.log('🖼️ Constructed proxied image URL:', imageUrl);
                 return res.json({ response: "Generating image...", image: imageUrl });
             }
 
@@ -134,6 +136,56 @@ router.post('/chat', async (req, res) => {
     } catch (error) {
         console.error('❌ AI Error:', error);
         res.status(500).json({ message: 'Error processing request', details: error.message });
+    }
+});
+
+// Image proxy endpoint to avoid CORS issues
+router.get('/image-proxy', async (req, res) => {
+    try {
+        const { url } = req.query;
+        if (!url) {
+            return res.status(400).json({ error: 'URL parameter is required' });
+        }
+
+        console.log('🖼️ Proxying image from:', url);
+
+        const imageResponse = await fetch(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'image/*, */*'
+            },
+            redirect: 'follow'
+        });
+
+        console.log('📡 Image response status:', imageResponse.status);
+        console.log('📡 Content-Type:', imageResponse.headers.get('content-type'));
+
+        if (!imageResponse.ok) {
+            console.error('❌ Image fetch failed:', imageResponse.status, imageResponse.statusText);
+            return res.status(imageResponse.status).json({ error: 'Failed to fetch image' });
+        }
+
+        const contentType = imageResponse.headers.get('content-type');
+
+        // Check if we actually got an image
+        if (!contentType || !contentType.startsWith('image/')) {
+            console.error('❌ Response is not an image, got:', contentType);
+            const text = await imageResponse.text();
+            console.error('Response body preview:', text.substring(0, 200));
+            return res.status(500).json({ error: 'URL did not return an image', contentType });
+        }
+
+        // Forward the image with proper headers
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=31536000');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+
+        const buffer = await imageResponse.arrayBuffer();
+        console.log('✅ Image proxied successfully, size:', buffer.byteLength, 'bytes');
+        res.send(Buffer.from(buffer));
+    } catch (error) {
+        console.error('❌ Image proxy error:', error);
+        res.status(500).json({ error: 'Failed to proxy image', details: error.message });
     }
 });
 

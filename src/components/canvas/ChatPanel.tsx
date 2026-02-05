@@ -96,7 +96,17 @@ const ChatPanel = ({
               ) : (
                 messages.map((message) => {
                   const user = getUserById(message.userId);
-                  const isCurrentUser = String(message.userId) === String(currentUserId);
+                  // Compare with both formats to handle userId and guestId properly
+                  const isCurrentUser = message.userId === currentUserId ||
+                    String(message.userId) === String(currentUserId);
+
+                  // Debug logging
+                  console.log('Chat Message Debug:', {
+                    messageUserId: message.userId,
+                    currentUserId: currentUserId,
+                    isCurrentUser: isCurrentUser,
+                    userName: message.userName
+                  });
 
                   return (
                     <motion.div

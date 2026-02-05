@@ -514,9 +514,24 @@ const Canvas = () => {
 
   // Setup Socket.io
   useSocket({
-    onRoomJoined: (data) => setParticipants(data.participants),
-    onUserJoined: (data) => setParticipants(data.participants),
-    onUserLeft: (data) => setParticipants(data.participants),
+    onRoomJoined: (data) => {
+      console.log('🎉 Room joined event:', data);
+      console.log('📊 Participants count:', data.participants?.length || 0);
+      console.log('📋 Participants:', data.participants);
+      setParticipants(data.participants);
+    },
+    onUserJoined: (data) => {
+      console.log('👋 User joined event:', data);
+      console.log('📊 Participants count:', data.participants?.length || 0);
+      console.log('📋 Participants:', data.participants);
+      setParticipants(data.participants);
+    },
+    onUserLeft: (data) => {
+      console.log('👋 User left event:', data);
+      console.log('📊 Participants count:', data.participants?.length || 0);
+      console.log('📋 Participants:', data.participants);
+      setParticipants(data.participants);
+    },
     onCanvasUpdated: (data) => { console.log('Canvas updated', data); },
     onStrokeDrawn: (data) => drawRemoteStroke(data.stroke),
     onPointDrawn: (data) => drawRemotePoint(data.point, data.strokeId, data.color, data.width),
