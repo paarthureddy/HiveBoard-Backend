@@ -214,35 +214,36 @@ export const useCanvas = (options: UseCanvasOptions = {}) => {
     const viewportRight = (canvasCssWidth - offset.x) / scale;
     const viewportBottom = (canvasCssHeight - offset.y) / scale;
 
-    const gridCanvas = gridCanvasRef.current;
-    if (gridCanvas) {
-      const gCtx = gridCanvas.getContext('2d');
-      if (gCtx) {
-        gCtx.setTransform(1, 0, 0, 1, 0, 0);
-        gCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
+    // Grid drawing disabled
+    // const gridCanvas = gridCanvasRef.current;
+    // if (gridCanvas) {
+    //   const gCtx = gridCanvas.getContext('2d');
+    //   if (gCtx) {
+    //     gCtx.setTransform(1, 0, 0, 1, 0, 0);
+    //     gCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
 
-        gCtx.translate(offset.x * dpr, offset.y * dpr);
-        gCtx.scale(scale * dpr, scale * dpr);
+    //     gCtx.translate(offset.x * dpr, offset.y * dpr);
+    //     gCtx.scale(scale * dpr, scale * dpr);
 
-        gCtx.strokeStyle = '#E8E4DF';
-        gCtx.lineWidth = 0.5 / scale;
-        const gridSize = 24;
+    //     gCtx.strokeStyle = '#E8E4DF';
+    //     gCtx.lineWidth = 0.5 / scale;
+    //     const gridSize = 24;
 
-        const startX = Math.floor(viewportLeft / gridSize) * gridSize;
-        const startY = Math.floor(viewportTop / gridSize) * gridSize;
+    //     const startX = Math.floor(viewportLeft / gridSize) * gridSize;
+    //     const startY = Math.floor(viewportTop / gridSize) * gridSize;
 
-        gCtx.beginPath();
-        for (let x = startX; x <= viewportRight; x += gridSize) {
-          gCtx.moveTo(x, viewportTop);
-          gCtx.lineTo(x, viewportBottom);
-        }
-        for (let y = startY; y <= viewportBottom; y += gridSize) {
-          gCtx.moveTo(viewportLeft, y);
-          gCtx.lineTo(viewportRight, y);
-        }
-        gCtx.stroke();
-      }
-    }
+    //     gCtx.beginPath();
+    //     for (let x = startX; x <= viewportRight; x += gridSize) {
+    //       gCtx.moveTo(x, viewportTop);
+    //       gCtx.lineTo(x, viewportBottom);
+    //     }
+    //     for (let y = startY; y <= viewportBottom; y += gridSize) {
+    //       gCtx.moveTo(viewportLeft, y);
+    //       gCtx.lineTo(viewportRight, y);
+    //     }
+    //     gCtx.stroke();
+    //   }
+    // }
 
     // Painting Helper
     const paintStroke = (points: Point[], color: string, width: number) => {
