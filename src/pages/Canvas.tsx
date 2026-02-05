@@ -796,7 +796,7 @@ const Canvas = () => {
       if (item) activeTransformerProps = { ...item, width: item.width || 200, height: item.height || 200, rotation: item.rotation || 0 };
     } else if (selectedObject.type === 'text') {
       const item = textItems.find(i => i.id === selectedObject.id);
-      if (item) activeTransformerProps = { ...item, width: 200, height: 50, rotation: item.rotation || 0 };
+      if (item) activeTransformerProps = { ...item, width: item.width || 200, height: item.height || 50, rotation: item.rotation || 0 };
     } else if (selectedObject.type === 'croquis') {
       const item = croquisItems.find(i => i.id === selectedObject.id);
       if (item) activeTransformerProps = { ...item, rotation: item.rotation || 0 };
@@ -1085,7 +1085,7 @@ const Canvas = () => {
           {textItems.map(item => (
             <div key={item.id}
               className="absolute pointer-events-auto cursor-grab active:cursor-grabbing"
-              style={{ left: item.x, top: item.y, color: item.color, fontSize: item.fontSize, transform: `rotate(${item.rotation || 0}rad)` }}
+              style={{ left: item.x, top: item.y, width: item.width, height: item.height, color: item.color, fontSize: item.fontSize, transform: `rotate(${item.rotation || 0}rad)` }}
               onMouseDown={(e) => {
                 if (tool === 'select') {
                   e.stopPropagation();

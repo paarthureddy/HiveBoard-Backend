@@ -54,6 +54,8 @@ export interface TextItem {
   color: string;
   fontSize: number;
   rotation?: number;
+  width?: number;
+  height?: number;
 }
 
 export interface CroquisItem {
