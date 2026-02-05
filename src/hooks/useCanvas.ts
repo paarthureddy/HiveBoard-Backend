@@ -38,9 +38,9 @@ export const useCanvas = (options: UseCanvasOptions = {}) => {
 
   // Viewport/Camera state (Refs for performance)
   // We keep refs for the render loop to avoid re-renders on every mouse move
-  const scaleRef = useRef(1);
+  const scaleRef = useRef(0.55);
   const offsetRef = useRef<Point>({ x: 0, y: 0 });
-  const [scaleUI, setScaleUI] = useState(1); // Read-only for UI display
+  const [scaleUI, setScaleUI] = useState(0.55); // Read-only for UI display
 
   // Request Animation Frame control
   const requestRedrawRef = useRef<() => void>(() => { });
@@ -316,9 +316,29 @@ export const useCanvas = (options: UseCanvasOptions = {}) => {
   const zoom = useCallback((delta: number, center?: { x: number, y: number }) => {
     const scale = scaleRef.current;
     let newScale = scale + delta;
-    newScale = Math.min(Math.max(newScale, 0.1), 5); // Clamping
+    newScale = Math.min(Math.max(newScale, 0.05), 5); // Clamping
 
     if (center) {
+      const offset = offsetRef.current;
+      const worldX = (center.x - offset.x) / scale;
+      const worldY = (center.y - offset.y) / scale;
+
+      const newOffsetX = center.x - worldX * newScale;
+      const newOffsetY = center.y - worldY * newScale;
+
+      offsetRef.current = { x: newOffsetX, y: newOffsetY };
+    }
+
+    scaleRef.current = newScale;
+    setScaleUI(newScale); // Sync UI state
+    requestRedrawRef.current();
+  }, []);
+
+  const setZoomLevel = useCallback((newScale: number, center?: { x: number, y: number }) => {
+    newScale = Math.min(Math.max(newScale, 0.05), 5); // Clamping
+
+    if (center) {
+      const scale = scaleRef.current;
       const offset = offsetRef.current;
       const worldX = (center.x - offset.x) / scale;
       const worldY = (center.y - offset.y) / scale;
@@ -415,6 +435,7 @@ export const useCanvas = (options: UseCanvasOptions = {}) => {
     scale: scaleUI, // Read-only state for UI
     pan,            // Direct Ref mutation
     zoom,           // Direct Ref mutation
+    setZoomLevel,    // Direct Ref mutation
 
     // Low-level Ref access if truly needed by component
     scaleRef,

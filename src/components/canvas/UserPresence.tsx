@@ -1,25 +1,36 @@
 import { motion } from "framer-motion";
 import { User, getRoleBadge } from "@/types/canvas";
+import { cn } from "@/lib/utils";
 
 interface UserPresenceProps {
   users: User[];
   currentUserId: string;
   onClick?: () => void;
+  vertical?: boolean;
+  maxVisible?: number;
 }
 
-const UserPresence = ({ users, currentUserId, onClick }: UserPresenceProps) => {
+const UserPresence = ({ users, currentUserId, onClick, vertical = false, maxVisible = 4 }: UserPresenceProps) => {
   const onlineUsers = users.filter(u => u.isOnline);
-  const maxVisible = 5;
   const visibleUsers = onlineUsers.slice(0, maxVisible);
   const remainingCount = onlineUsers.length - maxVisible;
 
   return (
     <div
-      className="relative flex items-center gap-1 cursor-pointer group hover:bg-muted/50 p-1 rounded-full border border-transparent hover:border-border transition-all"
+      className={cn(
+        "relative flex items-center cursor-pointer group hover:bg-muted/50 p-1 rounded-full border border-transparent hover:border-border transition-all",
+        vertical ? "flex-col gap-[-4px]" : "gap-1" // Negative margin for stacking overlap if vertical? Or just gap-1. User said "stack under bottom". Let's stick to gap-1 for clearly separated circles first or -space-y-2 for overlap. Let's use standard gap-2 for vertical.
+      )}
+      style={{ gap: vertical ? '0.5rem' : '0.25rem' }}
       onClick={onClick}
     >
       {/* Group Tooltip */}
-      <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-1.5 bg-foreground text-background text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-elevated pointer-events-none">
+      <div
+        className={cn(
+          "absolute px-3 py-1.5 bg-foreground text-background text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-elevated pointer-events-none",
+          vertical ? "right-full top-0 mr-2" : "top-full left-1/2 -translate-x-1/2 mt-2"
+        )}
+      >
         View Participants
       </div>
 
