@@ -1,4 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import html2canvas from 'html2canvas';
+import MeetingRenderer from '@/components/MeetingRenderer';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,6 +15,7 @@ import {
     Calendar,
     Clock,
     Palette,
+
     Loader2,
     Share2,
     Download,
@@ -23,6 +26,9 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
+import logo from '@/assets/hive-logo.jpg';
+
+
 
 const Home = () => {
     const { user, logout } = useAuth();
@@ -35,6 +41,8 @@ const Home = () => {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editingTitle, setEditingTitle] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
+    const [downloadingMeeting, setDownloadingMeeting] = useState<Meeting | null>(null);
+    const [isGeneratingImage, setIsGeneratingImage] = useState(false);
 
     useEffect(() => {
         fetchMeetings();
@@ -110,31 +118,88 @@ const Home = () => {
 
     const handleDownload = async (e: React.MouseEvent, meeting: Meeting) => {
         e.stopPropagation();
+
+        if (meeting.thumbnail) {
+            try {
+                const link = document.createElement('a');
+                link.href = meeting.thumbnail;
+                link.download = `${meeting.title.replace(/\s+/g, '-').toLowerCase()}.jpg`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                toast({
+                    title: 'Downloaded',
+                    description: 'Meeting preview downloaded successfully',
+                });
+            } catch (error) {
+                toast({
+                    title: 'Error',
+                    description: 'Failed to download image',
+                    variant: 'destructive',
+                });
+            }
+        } else {
+            // Fallback: Generate image on demand
+            try {
+                setIsGeneratingImage(true);
+                toast({ title: "Generating Image", description: "Please wait..." });
+
+                // Fetch full meeting to ensure we have canvasData
+                let fullMeeting = meeting;
+                if (!meeting.canvasData) {
+                    try {
+                        fullMeeting = await meetingsAPI.getById(meeting._id);
+                    } catch (err) {
+                        // ignore, try with current data
+                    }
+                }
+
+                setDownloadingMeeting(fullMeeting);
+                // The MeetingRenderer will trigger onReady, which handles the download
+            } catch (error) {
+                setIsGeneratingImage(false);
+                toast({
+                    title: 'Error',
+                    description: 'Failed to access meeting data',
+                    variant: 'destructive',
+                });
+            }
+        }
+    };
+
+    const handleImageReady = useCallback(async (container: HTMLDivElement) => {
+        if (!downloadingMeeting) return;
+
         try {
-            // Create a JSON file with meeting data
-            const dataStr = JSON.stringify(meeting, null, 2);
-            const dataBlob = new Blob([dataStr], { type: 'application/json' });
-            const url = URL.createObjectURL(dataBlob);
+            const canvas = await html2canvas(container, {
+                scale: 1, // Already 1920x1080
+                useCORS: true,
+                backgroundColor: '#ffffff',
+                logging: false,
+            });
+
             const link = document.createElement('a');
-            link.href = url;
-            link.download = `${meeting.title}.json`;
-            document.body.appendChild(link);
+            link.download = `${downloadingMeeting.title.replace(/\s+/g, '-').toLowerCase()}.jpg`;
+            link.href = canvas.toDataURL('image/jpeg', 0.9);
             link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
 
             toast({
                 title: 'Downloaded',
-                description: 'Meeting data downloaded successfully',
+                description: 'Image generated and downloaded',
             });
-        } catch (error: any) {
+        } catch (error) {
+            console.error(error);
             toast({
                 title: 'Error',
-                description: 'Failed to download meeting',
+                description: 'Failed to generate image',
                 variant: 'destructive',
             });
+        } finally {
+            setDownloadingMeeting(null);
+            setIsGeneratingImage(false);
         }
-    };
+    }, [downloadingMeeting, toast]);
 
     const startEditing = (e: React.MouseEvent, meeting: Meeting) => {
         e.stopPropagation();
@@ -174,224 +239,241 @@ const Home = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-hero">
-            {/* Background decoration */}
-            <div className="fixed inset-0 overflow-hidden pointer-events-none">
-                <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 120, repeat: Infinity, ease: 'linear' }}
-                    className="absolute -top-1/2 -right-1/2 w-full h-full bg-gradient-radial from-primary/5 via-transparent to-transparent"
-                />
-                <motion.div
-                    animate={{ rotate: -360 }}
-                    transition={{ duration: 180, repeat: Infinity, ease: 'linear' }}
-                    className="absolute -bottom-1/2 -left-1/2 w-full h-full bg-gradient-radial from-accent/5 via-transparent to-transparent"
-                />
-            </div>
 
-            {/* Header */}
-            <header className="relative z-10 border-b border-border/50 bg-background/50 backdrop-blur-sm">
-                <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-rose flex items-center justify-center">
-                            <Palette className="w-5 h-5 text-primary-foreground" />
-                        </div>
-                        <div>
-                            <h1 className="font-display text-xl font-semibold">Studio Flow</h1>
-                            <p className="text-sm text-muted-foreground">Welcome back, {user?.name}</p>
-                        </div>
-                    </div>
+        <div className="home-theme min-h-screen relative" style={{ backgroundColor: 'rgb(245, 244, 235)' }}>
 
-                    <Button variant="outline" onClick={handleLogout}>
-                        <LogOut className="w-4 h-4 mr-2" />
-                        Logout
-                    </Button>
-                </div>
-            </header>
+            {/* Content Container */}
+            <div className="relative z-10 min-h-screen flex flex-col">
 
-            {/* Main Content */}
-            <main className="relative z-10 container mx-auto px-6 py-12">
-                {/* Hero Section */}
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5 }}
-                    className="mb-12 text-center"
+                {/* Header */}
+                <header
+                    className="relative z-10 border-b border-[rgb(95,74,139)] backdrop-blur-md"
+                    style={{ backgroundColor: 'rgba(95, 74, 139, 0.75)' }}
                 >
-                    <h2 className="font-display text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
-                        Your Creative Sessions
-                    </h2>
-                    <p className="text-muted-foreground text-lg mb-8">
-                        Continue where you left off or start a new design session
-                    </p>
-
-                    <Button
-                        variant="hero"
-                        size="lg"
-                        onClick={handleCreateMeeting}
-                        className="group"
-                    >
-                        <Plus className="w-5 h-5 mr-2 group-hover:rotate-90 transition-transform duration-300" />
-                        Create New Meeting
-                    </Button>
-                </motion.div>
-
-                {/* Meetings Grid */}
-                {isLoading ? (
-                    <div className="flex items-center justify-center py-20">
-                        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                    </div>
-                ) : meetings.length === 0 ? (
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ duration: 0.5 }}
-                        className="text-center py-20"
-                    >
-                        <div className="w-24 h-24 rounded-full bg-gradient-rose/10 flex items-center justify-center mx-auto mb-6">
-                            <Calendar className="w-12 h-12 text-primary" />
+                    <div className="container mx-auto px-6 py-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden border-2 border-black/20">
+                                <img src={logo} alt="HiveBoard Logo" className="w-full h-full object-cover" />
+                            </div>
+                            <div>
+                                <h1 className="font-display text-xl font-semibold text-[rgb(255,212,29)]">HiveBoard</h1>
+                                <p className="text-sm text-[rgb(245,244,235)]">Welcome back, {user?.name}</p>
+                            </div>
                         </div>
-                        <h3 className="font-display text-2xl font-semibold mb-2">No meetings yet</h3>
-                        <p className="text-muted-foreground mb-6">
-                            Create your first meeting to start designing
+
+                        <Button variant="outline" onClick={handleLogout} className="border-border text-[rgb(95,74,139)] hover:bg-secondary/40">
+                            <LogOut className="w-4 h-4 mr-2" />
+                            Logout
+                        </Button>
+                    </div>
+                </header>
+
+                {/* Main Content */}
+                <main className="relative z-10 container mx-auto px-6 py-12">
+                    {/* Hero Section */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5 }}
+                        className="mb-12 text-center"
+                    >
+                        <h2 className="font-display text-4xl md:text-6xl font-bold mb-4 tracking-tight text-[rgb(95,74,139)]">
+                            Your Creative Sessions
+                        </h2>
+                        <p className="text-[rgb(95,74,139)] text-lg mb-8">
+                            Continue where you left off or start a new design session
                         </p>
-                        <Button variant="hero" onClick={handleCreateMeeting}>
-                            <Plus className="w-4 h-4 mr-2" />
-                            Create Your First Meeting
+
+                        <Button
+                            size="lg"
+                            onClick={handleCreateMeeting}
+                            className="bg-primary text-primary-foreground hover:opacity-90 shadow-glow group"
+                        >
+                            <Plus className="w-5 h-5 mr-2 group-hover:rotate-90 transition-transform duration-300" />
+                            Create New Meeting
                         </Button>
                     </motion.div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {meetings.map((meeting, index) => (
-                            <motion.div
-                                key={meeting._id}
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.5, delay: index * 0.1 }}
-                                onClick={() => handleOpenMeeting(meeting._id)}
-                                className="group cursor-pointer"
-                            >
-                                <div className="bg-card border border-border rounded-2xl p-6 shadow-elevated hover:shadow-elevated-hover transition-all duration-300 hover:-translate-y-1">
-                                    {/* Thumbnail */}
-                                    <div className="w-full h-48 rounded-xl bg-gradient-to-br from-primary/20 via-accent/20 to-primary/20 mb-4 flex items-center justify-center overflow-hidden">
-                                        {meeting.thumbnail ? (
-                                            <img
-                                                src={meeting.thumbnail}
-                                                alt={meeting.title}
-                                                className="w-full h-full object-cover"
-                                            />
-                                        ) : (
-                                            <Palette className="w-16 h-16 text-muted-foreground/50" />
-                                        )}
-                                    </div>
 
-                                    {/* Info */}
-                                    <div className="mb-2">
-                                        {editingId === meeting._id ? (
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <Input
-                                                    ref={inputRef}
-                                                    value={editingTitle}
-                                                    onChange={(e) => setEditingTitle(e.target.value)}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter') saveTitle(meeting._id);
-                                                        if (e.key === 'Escape') cancelEditing();
-                                                    }}
-                                                    onClick={(e) => e.stopPropagation()}
-                                                    className="flex-1"
+                    {/* Meetings Grid */}
+                    {isLoading ? (
+                        <div className="flex items-center justify-center py-20">
+                            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                        </div>
+                    ) : meetings.length === 0 ? (
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ duration: 0.5 }}
+                            className="text-center py-20"
+                        >
+                            <div className="w-24 h-24 rounded-full bg-gradient-rose/10 flex items-center justify-center mx-auto mb-6">
+                                <Calendar className="w-12 h-12 text-primary" />
+                            </div>
+                            <h3 className="font-display text-2xl font-semibold mb-2 text-[rgb(95,74,139)]">No meetings yet</h3>
+                            <p className="text-[rgb(95,74,139)] mb-6">
+                                Create your first meeting to start designing
+                            </p>
+                            <Button
+                                size="lg"
+                                onClick={handleCreateMeeting}
+                                className="bg-primary text-primary-foreground hover:opacity-90 shadow-glow"
+                            >
+                                <Plus className="w-4 h-4 mr-2" />
+                                Create Your First Meeting
+                            </Button>
+                        </motion.div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {meetings.map((meeting, index) => (
+                                <motion.div
+                                    key={meeting._id}
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ duration: 0.5, delay: index * 0.1 }}
+                                    onClick={() => handleOpenMeeting(meeting._id)}
+                                    className="group cursor-pointer"
+                                >
+                                    <div
+                                        className="backdrop-blur-md border-2 border-[rgb(255,162,64)] rounded-2xl p-6 shadow-elevated hover:shadow-glow transition-all duration-300 hover:-translate-y-1"
+                                        style={{ backgroundColor: 'rgba(255, 162, 64, 0.28)' }}
+                                    >
+                                        {/* Thumbnail */}
+                                        <div className="w-full h-48 rounded-xl bg-background mb-4 flex items-center justify-center overflow-hidden">
+                                            {meeting.thumbnail ? (
+                                                <img
+                                                    src={meeting.thumbnail}
+                                                    alt={meeting.title}
+                                                    className="w-full h-full object-cover"
                                                 />
-                                                <Button
-                                                    onClick={(e) => { e.stopPropagation(); saveTitle(meeting._id); }}
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="flex-shrink-0"
-                                                >
-                                                    <Check className="w-4 h-4 text-green-500" />
-                                                </Button>
-                                                <Button
-                                                    onClick={(e) => { e.stopPropagation(); cancelEditing(); }}
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="flex-shrink-0"
-                                                >
-                                                    <X className="w-4 h-4 text-red-500" />
-                                                </Button>
-                                            </div>
-                                        ) : (
-                                            <div className="flex items-start justify-between mb-2">
-                                                <h3 className="font-display text-xl font-semibold group-hover:text-primary transition-colors flex-1">
-                                                    {meeting.title}
-                                                </h3>
-                                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            ) : (
+                                                <Palette className="w-16 h-16 text-[rgb(255,212,29)]" />
+                                            )}
+                                        </div>
+
+                                        {/* Info */}
+                                        <div className="mb-2">
+                                            {editingId === meeting._id ? (
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <Input
+                                                        ref={inputRef}
+                                                        value={editingTitle}
+                                                        onChange={(e) => setEditingTitle(e.target.value)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') saveTitle(meeting._id);
+                                                            if (e.key === 'Escape') cancelEditing();
+                                                        }}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        className="flex-1"
+                                                    />
                                                     <Button
-                                                        onClick={(e) => startEditing(e, meeting)}
+                                                        onClick={(e) => { e.stopPropagation(); saveTitle(meeting._id); }}
                                                         variant="ghost"
                                                         size="icon"
-                                                        className="flex-shrink-0 h-8 w-8"
-                                                        title="Rename"
+                                                        className="flex-shrink-0"
                                                     >
-                                                        <Edit2 className="w-3.5 h-3.5" />
+                                                        <Check className="w-4 h-4 text-green-500" />
                                                     </Button>
                                                     <Button
-                                                        onClick={(e) => handleDownload(e, meeting)}
+                                                        onClick={(e) => { e.stopPropagation(); cancelEditing(); }}
                                                         variant="ghost"
                                                         size="icon"
-                                                        className="flex-shrink-0 h-8 w-8"
-                                                        title="Download"
+                                                        className="flex-shrink-0"
                                                     >
-                                                        <Download className="w-3.5 h-3.5" />
-                                                    </Button>
-                                                    <Button
-                                                        onClick={(e) => handleShare(e, meeting)}
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="flex-shrink-0 h-8 w-8"
-                                                        title="Share"
-                                                    >
-                                                        <Share2 className="w-3.5 h-3.5" />
-                                                    </Button>
-                                                    <Button
-                                                        onClick={(e) => handleDelete(e, meeting._id)}
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="flex-shrink-0 h-8 w-8 hover:text-destructive"
-                                                        title="Delete"
-                                                    >
-                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                        <X className="w-4 h-4 text-red-500" />
                                                     </Button>
                                                 </div>
-                                            </div>
-                                        )}
-                                    </div>
+                                            ) : (
+                                                <div className="flex items-start justify-between mb-2">
+                                                    <h3 className="font-display text-xl font-semibold text-[rgb(95,74,139)] group-hover:text-primary transition-colors flex-1">
+                                                        {meeting.title}
+                                                    </h3>
+                                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <Button
+                                                            onClick={(e) => startEditing(e, meeting)}
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="flex-shrink-0 h-8 w-8"
+                                                            title="Rename"
+                                                        >
+                                                            <Edit2 className="w-3.5 h-3.5" />
+                                                        </Button>
+                                                        <Button
+                                                            onClick={(e) => handleDownload(e, meeting)}
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="flex-shrink-0 h-8 w-8"
+                                                            title="Download"
+                                                        >
+                                                            <Download className="w-3.5 h-3.5" />
+                                                        </Button>
+                                                        <Button
+                                                            onClick={(e) => handleShare(e, meeting)}
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="flex-shrink-0 h-8 w-8"
+                                                            title="Share"
+                                                        >
+                                                            <Share2 className="w-3.5 h-3.5" />
+                                                        </Button>
+                                                        <Button
+                                                            onClick={(e) => handleDelete(e, meeting._id)}
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="flex-shrink-0 h-8 w-8 text-[rgb(215,53,53)] hover:text-[rgb(255,70,70)]"
+                                                            title="Delete"
+                                                        >
+                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
 
-                                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                                        <div className="flex items-center gap-1">
-                                            <Calendar className="w-4 h-4" />
-                                            <span>{new Date(meeting.createdAt).toLocaleDateString()}</span>
-                                        </div>
-                                        <div className="flex items-center gap-1">
-                                            <Clock className="w-4 h-4" />
-                                            <span>{formatDistanceToNow(new Date(meeting.updatedAt), { addSuffix: true })}</span>
+                                        <div className="flex items-center gap-4 text-sm text-[rgb(95,74,139)]">
+                                            <div className="flex items-center gap-1">
+                                                <Calendar className="w-4 h-4" />
+                                                <span>{new Date(meeting.createdAt).toLocaleDateString()}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <Clock className="w-4 h-4" />
+                                                <span>{formatDistanceToNow(new Date(meeting.updatedAt), { addSuffix: true })}</span>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            </motion.div>
-                        ))}
+                                </motion.div>
+                            ))}
+                        </div>
+                    )}
+                </main>
+
+                {/* Share Modal */}
+                {selectedMeeting && (
+                    <ShareModal
+                        isOpen={shareModalOpen}
+                        onClose={() => setShareModalOpen(false)}
+                        meetingId={selectedMeeting._id}
+                        meetingTitle={selectedMeeting.title}
+                    />
+                )}
+
+                {/* Hidden Renderer */}
+                {downloadingMeeting && downloadingMeeting.canvasData && (
+                    <div style={{ position: 'absolute', top: '-10000px', left: '-10000px', visibility: 'hidden' }}>
+                        <div id="hidden-renderer-container">
+                            <MeetingRenderer
+                                data={downloadingMeeting.canvasData}
+                                onReady={() => {
+                                    const el = document.getElementById('hidden-renderer-container');
+                                    if (el) handleImageReady(el as HTMLDivElement);
+                                }}
+                            />
+                        </div>
                     </div>
                 )}
-            </main>
-
-            {/* Share Modal */}
-            {selectedMeeting && (
-                <ShareModal
-                    isOpen={shareModalOpen}
-                    onClose={() => setShareModalOpen(false)}
-                    meetingId={selectedMeeting._id}
-                    meetingTitle={selectedMeeting.title}
-                />
-            )}
+            </div>
         </div>
     );
 };
 
 export default Home;
+

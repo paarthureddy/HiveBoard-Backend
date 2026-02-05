@@ -1,4 +1,4 @@
-import type { Config } from "tailwindcss";
+import type { Config } from "tailwindcss"; 7n
 
 export default {
   darkMode: ["class"],

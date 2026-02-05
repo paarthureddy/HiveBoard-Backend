@@ -75,6 +75,11 @@ export const meetingsAPI = {
         return response.data;
     },
 
+    getPublicById: async (id: string): Promise<Meeting> => {
+        const response = await api.get<Meeting>(`/meetings/public/${id}`);
+        return response.data;
+    },
+
     create: async (data: CreateMeetingRequest): Promise<Meeting> => {
         const response = await api.post<Meeting>('/meetings', data);
         return response.data;

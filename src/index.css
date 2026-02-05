@@ -1,131 +1,82 @@
-@import '@fontsource/playfair-display/400.css';
-@import '@fontsource/playfair-display/500.css';
-@import '@fontsource/playfair-display/600.css';
-@import '@fontsource/playfair-display/700.css';
-@import '@fontsource/inter/300.css';
-@import '@fontsource/inter/400.css';
-@import '@fontsource/inter/500.css';
-@import '@fontsource/inter/600.css';
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    /* Warm cream background - like fashion paper */
-    --background: 40 33% 98%;
-    --foreground: 30 10% 12%;
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
 
-    /* Card surfaces */
-    --card: 40 25% 97%;
-    --card-foreground: 30 10% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
 
-    /* Popover */
-    --popover: 40 25% 99%;
-    --popover-foreground: 30 10% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
 
-    /* Primary - Elegant rose gold */
-    --primary: 15 45% 65%;
-    --primary-foreground: 40 33% 98%;
+    --primary: 38 70% 55%; /* Gold-ish */
+    --primary-foreground: 210 40% 98%;
 
-    /* Secondary - Soft taupe */
-    --secondary: 30 15% 92%;
-    --secondary-foreground: 30 10% 25%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
 
-    /* Muted - Subtle warm gray */
-    --muted: 30 10% 94%;
-    --muted-foreground: 30 8% 50%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
 
-    /* Accent - Subtle gold */
-    --accent: 38 55% 75%;
-    --accent-foreground: 30 10% 12%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
 
-    /* Destructive */
-    --destructive: 0 65% 55%;
-    --destructive-foreground: 40 33% 98%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
 
-    /* Borders and inputs */
-    --border: 30 15% 88%;
-    --input: 30 15% 90%;
-    --ring: 15 45% 65%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
 
-    --radius: 0.75rem;
+    --radius: 0.5rem;
 
-    /* Canvas specific */
-    --canvas-bg: 40 20% 96%;
-    --canvas-grid: 30 10% 90%;
-    --canvas-selection: 15 45% 65%;
+    --canvas-bg: 40 20% 97%; /* Creamy background */
+    --canvas-grid: 30 10% 80%;
+    --canvas-selection: 210 100% 50%;
 
     /* Presence colors */
     --presence-owner: 38 70% 55%;
     --presence-editor: 15 45% 60%;
     --presence-viewer: 210 15% 60%;
     --presence-guest: 30 10% 65%;
-
-    /* Sidebar */
-    --sidebar-background: 40 25% 97%;
-    --sidebar-foreground: 30 10% 25%;
-    --sidebar-primary: 15 45% 65%;
-    --sidebar-primary-foreground: 40 33% 98%;
-    --sidebar-accent: 30 15% 92%;
-    --sidebar-accent-foreground: 30 10% 25%;
-    --sidebar-border: 30 15% 88%;
-    --sidebar-ring: 15 45% 65%;
-
-    /* Gradients */
-    --gradient-rose: linear-gradient(135deg, hsl(15 45% 65%) 0%, hsl(25 50% 70%) 100%);
-    --gradient-gold: linear-gradient(135deg, hsl(38 55% 70%) 0%, hsl(45 60% 75%) 100%);
-    --gradient-cream: linear-gradient(180deg, hsl(40 33% 98%) 0%, hsl(40 25% 95%) 100%);
-    --gradient-hero: linear-gradient(135deg, hsl(40 33% 98%) 0%, hsl(30 20% 95%) 50%, hsl(15 30% 95%) 100%);
-
-    /* Shadows */
-    --shadow-soft: 0 2px 8px -2px hsl(30 10% 12% / 0.08);
-    --shadow-medium: 0 4px 16px -4px hsl(30 10% 12% / 0.12);
-    --shadow-elevated: 0 8px 32px -8px hsl(30 10% 12% / 0.15);
-    --shadow-glow: 0 0 24px hsl(15 45% 65% / 0.25);
   }
 
   .dark {
-    --background: 30 10% 8%;
-    --foreground: 40 20% 95%;
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
 
-    --card: 30 10% 10%;
-    --card-foreground: 40 20% 95%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
 
-    --popover: 30 10% 10%;
-    --popover-foreground: 40 20% 95%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
 
-    --primary: 15 50% 60%;
-    --primary-foreground: 30 10% 8%;
+    --primary: 38 70% 55%;
+    --primary-foreground: 222.2 47.4% 11.2%;
 
-    --secondary: 30 10% 18%;
-    --secondary-foreground: 40 20% 90%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
 
-    --muted: 30 10% 15%;
-    --muted-foreground: 30 10% 60%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
 
-    --accent: 38 55% 50%;
-    --accent-foreground: 30 10% 8%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
 
-    --destructive: 0 60% 50%;
-    --destructive-foreground: 40 33% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
 
-    --border: 30 10% 20%;
-    --input: 30 10% 18%;
-    --ring: 15 50% 60%;
-
-    --canvas-bg: 30 10% 10%;
-    --canvas-grid: 30 10% 15%;
-
-    --sidebar-background: 30 10% 10%;
-    --sidebar-foreground: 40 20% 90%;
-    --sidebar-primary: 15 50% 60%;
-    --sidebar-primary-foreground: 30 10% 8%;
-    --sidebar-accent: 30 10% 18%;
-    --sidebar-accent-foreground: 40 20% 90%;
-    --sidebar-border: 30 10% 20%;
-    --sidebar-ring: 15 50% 60%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+    
+    --canvas-bg: 0 0% 10%;
+    --canvas-grid: 0 0% 20%;
+    --canvas-selection: 210 100% 60%;
   }
 }
 
@@ -133,115 +84,7 @@
   * {
     @apply border-border;
   }
-
   body {
-    @apply bg-background text-foreground antialiased;
-    font-family: 'Inter', sans-serif;
+    @apply bg-background text-foreground;
   }
-
-  h1, h2, h3, h4, h5, h6 {
-    font-family: 'Playfair Display', serif;
-  }
-}
-
-@layer utilities {
-  .font-display {
-    font-family: 'Playfair Display', serif;
-  }
-
-  .font-body {
-    font-family: 'Inter', sans-serif;
-  }
-
-  .text-gradient-rose {
-    background: var(--gradient-rose);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  .text-gradient-gold {
-    background: var(--gradient-gold);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  .bg-gradient-hero {
-    background: var(--gradient-hero);
-  }
-
-  .bg-gradient-rose {
-    background: var(--gradient-rose);
-  }
-
-  .bg-gradient-gold {
-    background: var(--gradient-gold);
-  }
-
-  .shadow-soft {
-    box-shadow: var(--shadow-soft);
-  }
-
-  .shadow-medium {
-    box-shadow: var(--shadow-medium);
-  }
-
-  .shadow-elevated {
-    box-shadow: var(--shadow-elevated);
-  }
-
-  .shadow-glow {
-    box-shadow: var(--shadow-glow);
-  }
-
-  /* Canvas grid pattern */
-  .canvas-grid {
-    background-image: 
-      linear-gradient(to right, hsl(var(--canvas-grid)) 1px, transparent 1px),
-      linear-gradient(to bottom, hsl(var(--canvas-grid)) 1px, transparent 1px);
-    background-size: 24px 24px;
-  }
-
-  /* Smooth scrollbar */
-  .scrollbar-elegant::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-
-  .scrollbar-elegant::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .scrollbar-elegant::-webkit-scrollbar-thumb {
-    background: hsl(var(--border));
-    border-radius: 3px;
-  }
-
-  .scrollbar-elegant::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--muted-foreground));
-  }
-
-  /* Glass morphism effect */
-  .glass {
-    background: hsl(var(--background) / 0.8);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-  }
-
-  /* Elegant border */
-  .border-elegant {
-    border: 1px solid hsl(var(--border));
-    background: linear-gradient(
-      135deg,
-      hsl(var(--background)) 0%,
-      hsl(var(--card)) 100%
-    );
-  }
-}
-
-/* Selection highlight */
-::selection {
-  background: hsl(var(--primary) / 0.2);
-  color: hsl(var(--foreground));
 }

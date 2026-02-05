@@ -1,11 +1,11 @@
 {
-    "name": "studio-flow-backend",
+    "name": "hiveboard-backend",
     "version": "1.0.0",
-    "description": "Backend server for Studio Flow application",
+    "description": "Backend server for HiveBoard application",
     "main": "index.js",
     "type": "module",
     "scripts": {
-        "dev": "node --watch index.js",
+        "dev": "nodemon index.js",
         "start": "node index.js"
     },
     "keywords": [
@@ -16,6 +16,7 @@
     "author": "",
     "license": "ISC",
     "dependencies": {
+        "@google/generative-ai": "^0.24.1",
         "bcryptjs": "^2.4.3",
         "cookie-parser": "^1.4.7",
         "cors": "^2.8.5",
@@ -27,5 +28,8 @@
         "passport": "^0.7.0",
         "passport-google-oauth20": "^2.0.0",
         "socket.io": "^4.8.3"
+    },
+    "devDependencies": {
+        "nodemon": "^3.1.11"
     }
 }

@@ -51,7 +51,7 @@ const ChatPanel = ({
         animate={{ opacity: 1, scale: 1 }}
         transition={{ delay: 0.3 }}
         onClick={onToggle}
-        className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-elevated hover:shadow-glow transition-all hover:scale-105 z-40"
+        className="fixed bottom-6 left-6 w-14 h-14 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-elevated hover:shadow-glow transition-all hover:scale-105 z-40"
       >
         {isOpen ? (
           <X className="w-5 h-5" />
@@ -71,11 +71,11 @@ const ChatPanel = ({
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, x: 300 }}
+            initial={{ opacity: 0, x: -300 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 300 }}
+            exit={{ opacity: 0, x: -300 }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="fixed right-6 bottom-24 w-80 h-[500px] bg-card border border-border rounded-2xl shadow-elevated flex flex-col overflow-hidden z-30"
+            className="fixed left-6 bottom-24 w-80 h-[500px] bg-card border border-border rounded-2xl shadow-elevated flex flex-col overflow-hidden z-30"
           >
             {/* Header */}
             <div className="px-4 py-3 border-b border-border flex items-center justify-between">
@@ -96,7 +96,7 @@ const ChatPanel = ({
               ) : (
                 messages.map((message) => {
                   const user = getUserById(message.userId);
-                  const isCurrentUser = message.userId === currentUserId;
+                  const isCurrentUser = String(message.userId) === String(currentUserId);
 
                   return (
                     <motion.div
@@ -118,18 +118,17 @@ const ChatPanel = ({
                         <div className="flex items-baseline gap-2 mb-1">
                           <span className="text-xs font-medium">{message.userName}</span>
                           <span className="text-[10px] text-muted-foreground">
-                            {new Date(message.timestamp).toLocaleTimeString([], { 
-                              hour: '2-digit', 
-                              minute: '2-digit' 
+                            {new Date(message.timestamp).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit'
                             })}
                           </span>
                         </div>
                         <div
-                          className={`px-3 py-2 rounded-xl text-sm ${
-                            isCurrentUser
-                              ? 'bg-primary text-primary-foreground rounded-br-sm'
-                              : 'bg-muted rounded-bl-sm'
-                          }`}
+                          className={`px-3 py-2 rounded-xl text-sm ${isCurrentUser
+                            ? 'bg-primary text-primary-foreground rounded-br-sm'
+                            : 'bg-muted rounded-bl-sm'
+                            }`}
                         >
                           {message.content}
                         </div>

@@ -88,7 +88,14 @@ roomSchema.methods.addParticipant = function (participant) {
 
 // Method to add active connection
 roomSchema.methods.addConnection = function (connection) {
-    this.activeConnections.push(connection);
+    const existingIndex = this.activeConnections.findIndex(conn => conn.socketId === connection.socketId);
+    if (existingIndex !== -1) {
+        // Update existing connection
+        this.activeConnections[existingIndex] = connection;
+    } else {
+        // Add new connection
+        this.activeConnections.push(connection);
+    }
 };
 
 // Method to remove connection

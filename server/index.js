@@ -9,6 +9,7 @@ import passportConfig from './config/passport.js';
 import authRoutes from './routes/auth.js';
 import meetingRoutes from './routes/meetings.js';
 import inviteRoutes from './routes/invites.js';
+import aiRoutes from './routes/ai.js';
 import { setupSocketHandlers } from './socketHandlers.js';
 
 // Load environment variables
@@ -26,7 +27,7 @@ const httpServer = createServer(app);
 // Initialize Socket.io
 const io = new Server(httpServer, {
     cors: {
-        origin: 'http://localhost:8080',
+        origin: true,
         methods: ['GET', 'POST'],
         credentials: true,
     },
@@ -37,7 +38,7 @@ setupSocketHandlers(io);
 
 // Middleware
 app.use(cors({
-    origin: 'http://localhost:8080', // Vite dev server
+    origin: true, // Allow any origin
     credentials: true,
 }));
 app.use(express.json());
@@ -48,9 +49,11 @@ app.use(cookieParser());
 app.use(passportConfig.initialize());
 
 // Routes
+// Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/meetings', meetingRoutes);
 app.use('/api/invites', inviteRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {
