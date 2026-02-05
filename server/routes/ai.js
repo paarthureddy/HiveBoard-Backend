@@ -16,8 +16,9 @@ const initAI = () => {
 router.post('/chat', async (req, res) => {
     console.log('--- NEW AI REQUEST ---');
     try {
-        const { message } = req.body || {};
+        const { message, context } = req.body || {};
         console.log('Message:', message);
+        console.log('Context:', context ? 'Provided' : 'None');
 
         const apiKey = process.env.GOOGLE_API_KEY ? process.env.GOOGLE_API_KEY.trim() : null;
         console.log('API Key present:', !!apiKey);
@@ -34,9 +35,23 @@ router.post('/chat', async (req, res) => {
         const imageKeywords = ['generate', 'image', 'picture', 'draw', 'show me'];
         const isImageRequest = imageKeywords.some(keyword => message.toLowerCase().includes(keyword));
 
+        // Construct System Prompt with Context
+        let contextString = "";
+        if (context) {
+            const notes = context.stickyNotes?.map(n => `- Sticky Note: "${n.text}"`).join('\n') || "";
+            const texts = context.textItems?.map(t => `- Text: "${t.text}"`).join('\n') || "";
+            if (notes || texts) {
+                contextString = `\n\nCURRENT BOARD CONTEXT:\n${notes}\n${texts}\n\nUse this context to inform your answers. If the user asks for a critique or summary, refer to these items.`;
+            }
+        }
+
         const systemPrompt = isImageRequest
             ? "Respond ONLY with a markdown image: ![IMAGE](https://pollinations.ai/p/{prompt}?width=1024&height=1024&nologo=true&model=turbo). Replace {prompt} with a descriptive, URL-encoded prompt based on the user request. No other text."
-            : "You are a helpful AI assistant for HiveBoard. Be concise (max 2 sentences).";
+            : `You are 'HiveMind', a collaborative AI partner for a whiteboard session. 
+            - Be concise, actionable, and creative.
+            - Format your response with Markdown (bold key terms, use lists).
+            - If the user asks for a critique, analyze the Board Context provided below.
+            - If the Board Context is empty, ask them to add some notes first.${contextString}`;
 
         const modelsToTry = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-pro"];
 

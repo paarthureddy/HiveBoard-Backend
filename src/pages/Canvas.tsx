@@ -1027,7 +1027,7 @@ const Canvas = () => {
         <Toolbar tool={tool} setTool={(newTool) => { if (!handleEditAttempt()) return; setTool(newTool); }} brushColor={brushColor} setBrushColor={(color) => { if (!handleEditAttempt()) return; setBrushColor(color); }} brushWidth={brushWidth} setBrushWidth={(width) => { if (!handleEditAttempt()) return; setBrushWidth(width); }} stickyColor={stickyColor} setStickyColor={setStickyColor} onUndo={handleUndo} onClear={handleClearCanvas} onAddCroquis={handleAddCroquis} />
         <ParticipantsList participants={participants} currentUserId={user?._id} currentGuestId={guestUser?.guestId} isOpen={isParticipantsListOpen} onClose={() => setIsParticipantsListOpen(false)} />
         <ChatPanel messages={messages} users={participants.map((p, i) => ({ id: p.userId || p.guestId || p.socketId, name: p.name, role: p.isOwner ? 'owner' : (p.userId ? 'editor' : 'viewer'), color: PRESENCE_COLORS[i % PRESENCE_COLORS.length], isOnline: true }))} currentUserId={user?._id || guestUser?.guestId || ''} onSendMessage={handleSendMessage} isOpen={isChatOpen} onToggle={() => { setIsChatOpen(!isChatOpen); if (!isChatOpen) setIsAiChatOpen(false); }} />
-        <AiChatPanel isOpen={isAiChatOpen} onToggle={() => { setIsAiChatOpen(!isAiChatOpen); if (!isAiChatOpen) setIsChatOpen(false); }} />
+        <AiChatPanel isOpen={isAiChatOpen} onToggle={() => { setIsAiChatOpen(!isAiChatOpen); if (!isAiChatOpen) setIsChatOpen(false); }} stickyNotes={stickyNotes} textItems={textItems} />
 
         <div className="fixed bottom-6 left-44 h-14 px-1.5 rounded-full bg-card/80 backdrop-blur-md border border-border shadow-elevated flex items-center gap-1 z-40 text-foreground transition-all hover:bg-card">
           <button

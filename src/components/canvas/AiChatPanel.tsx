@@ -3,24 +3,30 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Bot, X, Send, Sparkles } from "lucide-react";
-import { ChatMessage } from "@/types/canvas";
+import { ChatMessage, StickyNote, TextItem } from "@/types/canvas";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface AiChatPanelProps {
     isOpen: boolean;
     onToggle: () => void;
+    stickyNotes?: StickyNote[];
+    textItems?: TextItem[];
 }
 
 const INITIAL_MESSAGE: ChatMessage = {
     id: 'welcome',
     userId: 'ai',
     userName: 'HiveMind',
-    content: 'Hello! I am HiveMind. I can help you with your design. What would you like to create?',
+    content: 'Hello! I am HiveMind, your creative partner. I can see your board context. Ask me to critique, brainstorm, or generate ideas!',
     timestamp: new Date()
 };
 
 const AiChatPanel = ({
     isOpen,
     onToggle,
+    stickyNotes = [],
+    textItems = []
 }: AiChatPanelProps) => {
     const [messages, setMessages] = useState<ChatMessage[]>([INITIAL_MESSAGE]);
     const [inputValue, setInputValue] = useState("");
@@ -55,7 +61,13 @@ const AiChatPanel = ({
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ message: content }),
+                body: JSON.stringify({
+                    message: content,
+                    context: {
+                        stickyNotes: stickyNotes.map(n => ({ text: n.text, color: n.color })),
+                        textItems: textItems.map(t => ({ text: t.text, fontSize: t.fontSize }))
+                    }
+                }),
             });
 
             let data;
@@ -139,7 +151,7 @@ const AiChatPanel = ({
                                 </div>
                                 <div>
                                     <h3 className="font-display font-semibold">HiveMind</h3>
-                                    <p className="text-xs text-muted-foreground">Always active</p>
+                                    <p className="text-xs text-muted-foreground">Context Aware Partner</p>
                                 </div>
                             </div>
                         </div>
@@ -162,7 +174,7 @@ const AiChatPanel = ({
                                         >
                                             {isAi ? <Bot className="w-4 h-4" /> : 'Y'}
                                         </div>
-                                        <div className={`max-w-[75%] ${!isAi ? 'text-right' : ''}`}>
+                                        <div className={`max-w-[85%] ${!isAi ? 'text-right' : ''}`}>
                                             <div className="flex items-baseline gap-2 mb-1 justify-between">
                                                 <span className="text-xs font-medium">{message.userName}</span>
                                                 <span className="text-[10px] text-muted-foreground">
@@ -175,11 +187,19 @@ const AiChatPanel = ({
                                             <div
                                                 className={`px-3 py-2 rounded-xl text-sm ${!isAi
                                                     ? 'bg-primary text-primary-foreground rounded-br-sm'
-                                                    : 'bg-muted rounded-bl-sm'
+                                                    : 'bg-muted rounded-bl-sm prose prose-sm dark:prose-invert max-w-none'
                                                     }`}
                                             >
                                                 <div className="flex flex-col gap-2">
-                                                    {message.content && <span>{message.content}</span>}
+                                                    {message.content && (
+                                                        isAi ? (
+                                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                                                {message.content}
+                                                            </ReactMarkdown>
+                                                        ) : (
+                                                            <span>{message.content}</span>
+                                                        )
+                                                    )}
                                                     {message.imageUrl && (
                                                         <div className="relative group mt-1">
                                                             <img
@@ -226,7 +246,7 @@ const AiChatPanel = ({
                                 <Input
                                     value={inputValue}
                                     onChange={(e) => setInputValue(e.target.value)}
-                                    placeholder="Ask something..."
+                                    placeholder="Ask for ideas, critiques, or images..."
                                     className="flex-1 bg-muted border-0 focus-visible:ring-1"
                                 />
                                 <Button type="submit" size="icon" disabled={!inputValue.trim()} className="bg-violet-600 hover:bg-violet-700">
