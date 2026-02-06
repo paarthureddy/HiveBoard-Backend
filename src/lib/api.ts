@@ -118,4 +118,11 @@ export const invitesAPI = {
     },
 };
 
+export const userAPI = {
+    getReport: async (): Promise<{ totalMeetings: number; totalLinkShares: number; totalStrokes: number; estimatedTimeSpentMinutes: number; memberSince: string }> => {
+        const response = await api.get('/users/report');
+        return response.data;
+    },
+};
+
 export default api;

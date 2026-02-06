@@ -10,6 +10,7 @@ import authRoutes from './routes/auth.js';
 import meetingRoutes from './routes/meetings.js';
 import inviteRoutes from './routes/invites.js';
 import aiRoutes from './routes/ai.js';
+import userRoutes from './routes/user.js';
 import { setupSocketHandlers } from './socketHandlers.js';
 
 // Load environment variables
@@ -54,6 +55,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/meetings', meetingRoutes);
 app.use('/api/invites', inviteRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/users', userRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {

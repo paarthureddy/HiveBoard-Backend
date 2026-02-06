@@ -277,6 +277,34 @@ export const setupSocketHandlers = (io) => {
             }
         });
 
+        // Update stroke
+        socket.on('update-stroke', async (data) => {
+            try {
+                if (socket.roomId) {
+                    socket.to(socket.roomId).emit('stroke-updated', {
+                        ...data,
+                        timestamp: Date.now(),
+                    });
+
+                    if (data.meetingId && data.updates) {
+                        const updateFields = {};
+                        for (const [key, value] of Object.entries(data.updates)) {
+                            // Careful with nested object updates in Mongo arrays
+                            // For simplicity with stroke points/transforms, we might need to be smart
+                            updateFields[`canvasData.strokes.$.${key}`] = value;
+                        }
+
+                        await Meeting.updateOne(
+                            { _id: data.meetingId, 'canvasData.strokes.id': data.id },
+                            { $set: updateFields }
+                        );
+                    }
+                }
+            } catch (error) {
+                console.error('Error updating stroke:', error);
+            }
+        });
+
         // Add croquis
         socket.on('add-croquis', async (data) => {
             try {

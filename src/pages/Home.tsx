@@ -9,12 +9,14 @@ import type { Meeting } from '@/types/meeting';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import ShareModal from '@/components/ShareModal';
+import UserReportModal from '@/components/UserReportModal';
 import {
     Plus,
     LogOut,
     Calendar,
     Clock,
     Palette,
+    Activity, // Added Activity icon import
 
     Loader2,
     Share2,
@@ -28,8 +30,6 @@ import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
 import logo from '@/assets/hive-logo.jpg';
 
-
-
 const Home = () => {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
@@ -37,6 +37,7 @@ const Home = () => {
     const [meetings, setMeetings] = useState<Meeting[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [shareModalOpen, setShareModalOpen] = useState(false);
+    const [reportModalOpen, setReportModalOpen] = useState(false); // Added report modal state
     const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editingTitle, setEditingTitle] = useState('');
@@ -239,7 +240,6 @@ const Home = () => {
     };
 
     return (
-
         <div className="home-theme min-h-screen relative" style={{ backgroundColor: 'rgb(245, 244, 235)' }}>
 
             {/* Content Container */}
@@ -261,10 +261,16 @@ const Home = () => {
                             </div>
                         </div>
 
-                        <Button variant="outline" onClick={handleLogout} className="border-border text-[rgb(95,74,139)] hover:bg-secondary/40">
-                            <LogOut className="w-4 h-4 mr-2" />
-                            Logout
-                        </Button>
+                        <div className="flex gap-2">
+                            <Button onClick={() => setReportModalOpen(true)} className="bg-[rgb(255,162,64)] text-white hover:bg-[rgb(255,182,84)] border-none">
+                                <Activity className="w-4 h-4 mr-2" />
+                                My Report
+                            </Button>
+                            <Button variant="outline" onClick={handleLogout} className="border-border text-[rgb(95,74,139)] hover:bg-secondary/40">
+                                <LogOut className="w-4 h-4 mr-2" />
+                                Logout
+                            </Button>
+                        </div>
                     </div>
                 </header>
 
@@ -456,6 +462,12 @@ const Home = () => {
                     />
                 )}
 
+                {/* User Report Modal */}
+                <UserReportModal
+                    isOpen={reportModalOpen}
+                    onClose={() => setReportModalOpen(false)}
+                />
+
                 {/* Hidden Renderer */}
                 {downloadingMeeting && downloadingMeeting.canvasData && (
                     <div style={{ position: 'absolute', top: '-10000px', left: '-10000px', visibility: 'hidden' }}>
@@ -476,4 +488,3 @@ const Home = () => {
 };
 
 export default Home;
-

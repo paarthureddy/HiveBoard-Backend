@@ -44,6 +44,12 @@ const userSchema = new mongoose.Schema({
         type: Date,
         default: Date.now,
     },
+    // New fields for accumulating report data
+    reportData: {
+        accumulatedTimeMinutes: { type: Number, default: 0 },
+        accumulatedStrokes: { type: Number, default: 0 },
+        lastReportDate: { type: Date, default: Date.now }
+    }
 });
 
 // Hash password before saving

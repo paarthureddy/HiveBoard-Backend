@@ -173,6 +173,11 @@ export const sendDeleteText = (data: { meetingId?: string; id: string; }): void 
     socket.emit('delete-text', data);
 };
 
+export const sendUpdateStroke = (data: { meetingId?: string; id: string; updates: any; }): void => {
+    const socket = getSocket();
+    socket.emit('update-stroke', data);
+};
+
 export const requestCanvasState = (data: { meetingId: string }): void => {
     const socket = getSocket();
     socket.emit('request-canvas-state', data);
@@ -201,5 +206,6 @@ export default {
     sendAddText,
     sendUpdateText,
     sendDeleteText,
+    sendUpdateStroke,
 };
 

@@ -26,6 +26,7 @@ interface UseSocketOptions {
     onTextAdded?: (data: { item: any }) => void;
     onTextUpdated?: (data: { id: string; updates: any }) => void;
     onTextDeleted?: (data: { id: string }) => void;
+    onStrokeUpdated?: (data: { id: string; updates: any }) => void;
 }
 
 export const useSocket = (options: UseSocketOptions = {}) => {
@@ -68,6 +69,7 @@ export const useSocket = (options: UseSocketOptions = {}) => {
         const handleTextAdded = (data: any) => optionsRef.current.onTextAdded?.(data);
         const handleTextUpdated = (data: any) => optionsRef.current.onTextUpdated?.(data);
         const handleTextDeleted = (data: any) => optionsRef.current.onTextDeleted?.(data);
+        const handleStrokeUpdated = (data: any) => optionsRef.current.onStrokeUpdated?.(data);
 
         // Set up event listeners
         socket.on('room-joined', handleRoomJoined);
@@ -91,6 +93,7 @@ export const useSocket = (options: UseSocketOptions = {}) => {
         socket.on('text-added', handleTextAdded);
         socket.on('text-updated', handleTextUpdated);
         socket.on('text-deleted', handleTextDeleted);
+        socket.on('stroke-updated', handleStrokeUpdated);
         socket.on('error', handleError);
 
         // Cleanup on unmount
@@ -117,6 +120,7 @@ export const useSocket = (options: UseSocketOptions = {}) => {
             socket.off('text-added', handleTextAdded);
             socket.off('text-updated', handleTextUpdated);
             socket.off('text-deleted', handleTextDeleted);
+            socket.off('stroke-updated', handleStrokeUpdated);
 
             disconnectSocket();
         };
