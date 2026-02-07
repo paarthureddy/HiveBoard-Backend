@@ -29,6 +29,7 @@ export interface User {
 export interface ChatMessage {
   id: string;
   userId: string;
+  guestId?: string;
   userName: string;
   content: string;
   imageUrl?: string;
