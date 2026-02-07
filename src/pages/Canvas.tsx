@@ -584,6 +584,7 @@ const Canvas = () => {
       setMessages(history.map((msg: any) => ({
         id: msg._id,
         userId: msg.userId || msg.guestId,
+        guestId: msg.guestId,
         userName: msg.userName,
         content: msg.content,
         timestamp: new Date(msg.timestamp)
@@ -596,6 +597,7 @@ const Canvas = () => {
         return [...prev, {
           id: msg._id,
           userId: msg.userId || msg.guestId,
+          guestId: msg.guestId,
           userName: msg.userName,
           content: msg.content,
           timestamp: new Date(msg.timestamp)
@@ -1148,7 +1150,7 @@ const Canvas = () => {
               />
               {selectedObject?.id === note.id && (
                 <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-popover/95 backdrop-blur border border-border rounded-xl shadow-xl flex items-center p-1.5 gap-2 z-50 pointer-events-auto" onMouseDown={e => e.stopPropagation()}>
-                  <button onClick={() => {
+                  <button type="button" onClick={() => {
                     setStickyNotes(prev => prev.filter(n => n.id !== note.id));
                     setSelectedObject(null);
                   }} className="p-1.5 hover:bg-muted rounded-lg transition-colors text-destructive" title="Delete"><Trash2 className="w-4 h-4" /></button>

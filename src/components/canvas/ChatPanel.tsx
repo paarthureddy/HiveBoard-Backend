@@ -96,13 +96,21 @@ const ChatPanel = ({
               ) : (
                 messages.map((message) => {
                   const user = getUserById(message.userId);
-                  // Compare with both formats to handle userId and guestId properly
-                  const isCurrentUser = message.userId === currentUserId ||
-                    String(message.userId) === String(currentUserId);
+                  // Check if this message is from the current user
+                  // Compare both userId and guestId to handle all scenarios:
+                  // 1. Authenticated user (message.userId === currentUserId)
+                  // 2. Guest user (message.userId === currentUserId, where userId is actually guestId)
+                  // 3. Authenticated user with guestId (message.guestId === currentUserId)
+                  const isCurrentUser =
+                    message.userId === currentUserId ||
+                    message.guestId === currentUserId ||
+                    String(message.userId) === String(currentUserId) ||
+                    String(message.guestId) === String(currentUserId);
 
                   // Debug logging
                   console.log('Chat Message Debug:', {
                     messageUserId: message.userId,
+                    messageGuestId: message.guestId,
                     currentUserId: currentUserId,
                     isCurrentUser: isCurrentUser,
                     userName: message.userName
