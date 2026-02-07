@@ -578,6 +578,7 @@ const Canvas = () => {
       setMessages(history.map((msg: any) => ({
         id: msg._id,
         userId: msg.userId || msg.guestId,
+        guestId: msg.guestId,
         userName: msg.userName,
         content: msg.content,
         timestamp: new Date(msg.timestamp)
@@ -590,6 +591,7 @@ const Canvas = () => {
         return [...prev, {
           id: msg._id,
           userId: msg.userId || msg.guestId,
+          guestId: msg.guestId,
           userName: msg.userName,
           content: msg.content,
           timestamp: new Date(msg.timestamp)
