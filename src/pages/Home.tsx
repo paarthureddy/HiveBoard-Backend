@@ -40,26 +40,41 @@ import { formatDistanceToNow } from 'date-fns';
 import logo from '@/assets/hive-logo.jpg';
 
 const Home = () => {
-    const { user, logout } = useAuth();
-    const navigate = useNavigate();
-    const { toast } = useToast();
+    // --- Hooks & State ---
+    const { user, logout } = useAuth(); // Auth context for user data and logout
+    const navigate = useNavigate(); // Navigation hook
+    const { toast } = useToast(); // Toast notifications
+
+    // State for managing meetings list
     const [meetings, setMeetings] = useState<Meeting[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+
+    // Modal states
     const [shareModalOpen, setShareModalOpen] = useState(false);
-    const [reportModalOpen, setReportModalOpen] = useState(false); // Added report modal state
+    const [reportModalOpen, setReportModalOpen] = useState(false);
+    const [joinModalOpen, setJoinModalOpen] = useState(false);
+
+    // Selected item states
     const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
+    const [joinMeetingId, setJoinMeetingId] = useState('');
+
+    // Editing states (inline rename)
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editingTitle, setEditingTitle] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
+
+    // Download/Image generation states
     const [downloadingMeeting, setDownloadingMeeting] = useState<Meeting | null>(null);
     const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-    const [joinMeetingId, setJoinMeetingId] = useState('');
-    const [joinModalOpen, setJoinModalOpen] = useState(false);
 
+    // Fetch meetings on component mount
     useEffect(() => {
         fetchMeetings();
     }, []);
 
+    // --- API Interactions ---
+
+    // Fetch all meetings created by the user
     const fetchMeetings = async () => {
         try {
             setIsLoading(true);
@@ -76,9 +91,10 @@ const Home = () => {
         }
     };
 
+    // Create a new meeting and navigate to the canvas
     const handleCreateMeeting = async () => {
         try {
-            // Get next project number
+            // Generate a default title based on count
             const projectNumber = meetings.length + 1;
             const newMeeting = await meetingsAPI.create({
                 title: `Project${projectNumber}`,
@@ -93,15 +109,18 @@ const Home = () => {
         }
     };
 
+    // Log out the user
     const handleLogout = () => {
         logout();
         navigate('/auth');
     };
 
+    // Open an existing meeting
     const handleOpenMeeting = (meetingId: string) => {
         navigate(`/canvas?meetingId=${meetingId}`);
     };
 
+    // Join a meeting by ID
     const handleJoinMeeting = () => {
         if (!joinMeetingId.trim()) return;
         setJoinModalOpen(false);
@@ -115,12 +134,14 @@ const Home = () => {
         setShareModalOpen(true);
     };
 
+    // Delete a meeting
     const handleDelete = async (e: React.MouseEvent, meetingId: string) => {
         e.stopPropagation();
         if (!confirm('Are you sure you want to delete this meeting?')) return;
 
         try {
             await meetingsAPI.delete(meetingId);
+            // Optimistic update: remove from local state immediately
             setMeetings(meetings.filter(m => m._id !== meetingId));
             toast({
                 title: 'Deleted',
@@ -135,10 +156,12 @@ const Home = () => {
         }
     };
 
+    // Download meeting thumbnail or generate one if missing
     const handleDownload = async (e: React.MouseEvent, meeting: Meeting) => {
         e.stopPropagation();
 
         if (meeting.thumbnail) {
+            // Download existing thumbnail
             try {
                 const link = document.createElement('a');
                 link.href = meeting.thumbnail;
@@ -159,12 +182,12 @@ const Home = () => {
                 });
             }
         } else {
-            // Fallback: Generate image on demand
+            // Fallback: Generate image on demand using hidden renderer
             try {
                 setIsGeneratingImage(true);
                 toast({ title: "Generating Image", description: "Please wait..." });
 
-                // Fetch full meeting to ensure we have canvasData
+                // Fetch full meeting to ensure we have canvasData if not present in list view
                 let fullMeeting = meeting;
                 if (!meeting.canvasData) {
                     try {
@@ -175,7 +198,7 @@ const Home = () => {
                 }
 
                 setDownloadingMeeting(fullMeeting);
-                // The MeetingRenderer will trigger onReady, which handles the download
+                // The MeetingRenderer component (hidden) will trigger onReady, which handles the actual capture
             } catch (error) {
                 setIsGeneratingImage(false);
                 toast({

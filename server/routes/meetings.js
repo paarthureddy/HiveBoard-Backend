@@ -4,9 +4,10 @@ import protect from '../middleware/auth.js';
 
 const router = express.Router();
 
-// All routes are protected
+// --- PUBLIC ROUTES ---
+
 // @route   GET /api/meetings/public/:id
-// @desc    Get a single meeting by ID (Public access check)
+// @desc    Get a single meeting by ID for guests (Public access check)
 // @access  Public (if meeting allows guests)
 router.get('/public/:id', async (req, res) => {
     try {
@@ -16,19 +17,18 @@ router.get('/public/:id', async (req, res) => {
             return res.status(404).json({ message: 'Meeting not found' });
         }
 
-        // Check if meeting allows guests
+        // Security check: ensure the meeting is configured to allow guests
         if (!meeting.allowGuests) {
             return res.status(403).json({ message: 'Guests are not allowed in this meeting' });
         }
 
-        // Return only necessary info for guests
+        // Return only necessary info for guests (filtering sensitive data)
         res.json({
             _id: meeting._id,
             title: meeting.title,
-            createdBy: meeting.createdBy, // Or populate name if needed
+            createdBy: meeting.createdBy,
             allowGuests: meeting.allowGuests,
             canvasData: meeting.canvasData, // Needed for initial state
-            // Don't leak sensitive info
         });
     } catch (error) {
         console.error('Get public meeting error:', error);
@@ -36,17 +36,19 @@ router.get('/public/:id', async (req, res) => {
     }
 });
 
-// All routes after this are protected
+// --- PROTECTED ROUTES (Require Login) ---
+// All routes after this middleware require a valid JWT token
 router.use(protect);
 
 // @route   GET /api/meetings
-// @desc    Get all meetings for the logged-in user
+// @desc    Get all meetings created by the logged-in user
 // @access  Private
 router.get('/', async (req, res) => {
     try {
+        // Find meetings where 'createdBy' matches the authenticated user ID
         const meetings = await Meeting.find({ createdBy: req.user._id })
-            .sort({ updatedAt: -1 })
-            .select('-canvasData'); // Exclude canvas data for list view
+            .sort({ updatedAt: -1 }) // Sort by newest first
+            .select('-canvasData'); // Exclude heavy canvas data for the list view
 
         res.json(meetings);
     } catch (error) {
@@ -56,7 +58,7 @@ router.get('/', async (req, res) => {
 });
 
 // @route   GET /api/meetings/:id
-// @desc    Get a single meeting by ID
+// @desc    Get a single meeting by ID (with authorization check)
 // @access  Private
 router.get('/:id', async (req, res) => {
     try {
@@ -66,7 +68,7 @@ router.get('/:id', async (req, res) => {
             return res.status(404).json({ message: 'Meeting not found' });
         }
 
-        // Check if user owns this meeting
+        // Authorization check: User must be the owner (TODO: Add shared access check)
         if (meeting.createdBy.toString() !== req.user._id.toString()) {
             return res.status(403).json({ message: 'Not authorized to access this meeting' });
         }
@@ -87,7 +89,7 @@ router.post('/', async (req, res) => {
 
         const meeting = await Meeting.create({
             title: title || 'Untitled Meeting',
-            createdBy: req.user._id,
+            createdBy: req.user._id, // Assign the logged-in user as owner
             canvasData: canvasData || {},
             thumbnail: thumbnail || '',
         });
@@ -100,7 +102,7 @@ router.post('/', async (req, res) => {
 });
 
 // @route   PUT /api/meetings/:id
-// @desc    Update a meeting
+// @desc    Update a meeting (title, canvas data, thumbnail)
 // @access  Private
 router.put('/:id', async (req, res) => {
     try {
@@ -110,14 +112,16 @@ router.put('/:id', async (req, res) => {
             return res.status(404).json({ message: 'Meeting not found' });
         }
 
-        // Check if user owns this meeting
+        // Authorization check
         if (meeting.createdBy.toString() !== req.user._id.toString()) {
             return res.status(403).json({ message: 'Not authorized to update this meeting' });
         }
 
         const { title, canvasData, thumbnail } = req.body;
 
+        // Update fields if provided
         meeting.title = title || meeting.title;
+        // Check for undefined explicitly to allow empty object {} updates
         meeting.canvasData = canvasData !== undefined ? canvasData : meeting.canvasData;
         meeting.thumbnail = thumbnail !== undefined ? thumbnail : meeting.thumbnail;
 
@@ -131,7 +135,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // @route   DELETE /api/meetings/:id
-// @desc    Delete a meeting
+// @desc    Delete a meeting permanently
 // @access  Private
 router.delete('/:id', async (req, res) => {
     try {
@@ -141,7 +145,7 @@ router.delete('/:id', async (req, res) => {
             return res.status(404).json({ message: 'Meeting not found' });
         }
 
-        // Check if user owns this meeting
+        // Authorization check
         if (meeting.createdBy.toString() !== req.user._id.toString()) {
             return res.status(403).json({ message: 'Not authorized to delete this meeting' });
         }

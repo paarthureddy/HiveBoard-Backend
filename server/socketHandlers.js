@@ -2,19 +2,31 @@ import Room from './models/Room.js';
 import Meeting from './models/Meeting.js';
 import Message from './models/Message.js';
 
+/**
+ * Configure all Socket.io event listners for real-time functionality.
+ * This handles room management, live drawing, chat, and participants.
+ */
 export const setupSocketHandlers = (io) => {
+    // Listen for new client connections
     io.on('connection', (socket) => {
         console.log(` Client connected: ${socket.id}`);
 
-        // Join a room
+        /**
+         * Event: join-room
+         * Handles a user joining a specific meeting room.
+         * - Creates the room in DB if it doesn't exist
+         * - Adds the user to the participant list
+         * - Emits current chat history and participant list to the user
+         * - Notifies other users in the room
+         */
         socket.on('join-room', async (data) => {
             try {
                 const { roomId, meetingId, userId, guestId, name, role } = data;
 
-                // Join the socket.io room
+                // Join the socket.io room channel
                 socket.join(roomId);
 
-                // Find or create room
+                // Find or create room in MongoDB for tracking participants
                 let room = await Room.findOne({ roomId });
 
                 if (!room && meetingId) {
@@ -30,20 +42,7 @@ export const setupSocketHandlers = (io) => {
                 }
 
                 if (room) {
-                    // Clean up stale connections (zombies from server restarts)
-                    // DISABLED FOR DEBUGGING
-                    /* if (io.sockets && io.sockets.sockets) {
-                        const connectedSocketIds = io.sockets.sockets; // Map of socketId -> Socket
-                        const initialCount = room.activeConnections.length;
-                        room.activeConnections = room.activeConnections.filter(conn =>
-                            connectedSocketIds.has(conn.socketId)
-                        );
-                        const finalCount = room.activeConnections.length;
-                        if (initialCount !== finalCount) {
-                            console.log(`🧹 Creating room: Removed ${initialCount - finalCount} stale connections`);
-                        }
-                    } */
-                    // Add connection to active connections
+                    // Add connection to active connections list in DB
                     room.addConnection({
                         socketId: socket.id,
                         userId: userId || null,
@@ -51,7 +50,7 @@ export const setupSocketHandlers = (io) => {
                         name: name || 'Anonymous',
                     });
 
-                    // Add participant if not already added
+                    // Add participant to the persistent list if not already added
                     room.addParticipant({
                         userId: userId || null,
                         guestId: guestId || null,
@@ -61,20 +60,20 @@ export const setupSocketHandlers = (io) => {
 
                     await room.save();
 
-                    // Store room info in socket
+                    // Store room info in the socket object for easy access later
                     socket.roomId = roomId;
                     socket.userId = userId;
                     socket.guestId = guestId;
 
-                    // Get chat history
+                    // Fetch and send recent chat history
                     const messages = await Message.find({ roomId })
                         .sort({ timestamp: -1 })
                         .limit(50);
 
-                    // Emit history reversed (oldest first)
+                    // Emit history reversed (oldest first) so it displays correctly
                     socket.emit('chat-history', messages.reverse());
 
-                    // Get all active participants
+                    // Get updated list of all active participants
                     const participants = room.activeConnections.map(conn => ({
                         socketId: conn.socketId,
                         userId: conn.userId ? conn.userId.toString() : null,
@@ -86,14 +85,14 @@ export const setupSocketHandlers = (io) => {
                     console.log('📊 Active Connections in DB:', room.activeConnections.length);
                     console.log('📋 Generated Participants List:', participants);
 
-                    // Notify user they joined
+                    // Notify the user that they have successfully joined
                     socket.emit('room-joined', {
                         roomId,
                         participants,
                         role: userId && userId.toString() === room.owner.toString() ? 'owner' : role || 'guest',
                     });
 
-                    // Notify others in the room
+                    // Notify all other users in the room that someone joined
                     socket.to(roomId).emit('user-joined', {
                         socketId: socket.id,
                         userId,
@@ -110,18 +109,23 @@ export const setupSocketHandlers = (io) => {
             }
         });
 
-        // Leave room
+        /**
+         * Event: leave-room
+         * Handles explicit disconnections or user leaving the page.
+         * - Removes the user from the active connections list
+         * - Notifies others that the user left
+         */
         socket.on('leave-room', async () => {
             try {
                 if (socket.roomId) {
                     const room = await Room.findOne({ roomId: socket.roomId });
 
                     if (room) {
-                        // Remove connection
+                        // Remove connection from DB
                         room.removeConnection(socket.id);
                         await room.save();
 
-                        // Get updated participants
+                        // Get updated participants list
                         const participants = room.activeConnections.map(conn => ({
                             socketId: conn.socketId,
                             userId: conn.userId,
@@ -145,26 +149,13 @@ export const setupSocketHandlers = (io) => {
             }
         });
 
-        // Get participants
+        // Helper event to fetch current participants
         socket.on('get-participants', async () => {
             try {
                 if (socket.roomId) {
                     const room = await Room.findOne({ roomId: socket.roomId });
 
                     if (room) {
-                        // Clean up stale connections here too
-                        /* if (io.sockets && io.sockets.sockets) {
-                            const connectedSocketIds = io.sockets.sockets;
-                            let changed = false;
-                            const initialLen = room.activeConnections.length;
-                            room.activeConnections = room.activeConnections.filter(conn =>
-                                connectedSocketIds.has(conn.socketId)
-                            );
-                            if (room.activeConnections.length !== initialLen) {
-                                await room.save();
-                            }
-                        } */
-
                         const participants = room.activeConnections.map(conn => ({
                             socketId: conn.socketId,
                             userId: conn.userId,
@@ -181,13 +172,17 @@ export const setupSocketHandlers = (io) => {
             }
         });
 
-        // Real-time drawing events
+        // --- Real-time Drawing Events ---
 
-        // Draw stroke (completed stroke)
+        /**
+         * Event: draw-stroke
+         * Broadcasts a completed drawing stroke to all other users.
+         * Also saves the stroke to the database for persistence.
+         */
         socket.on('draw-stroke', async (data) => {
             try {
                 if (socket.roomId) {
-                    // Broadcast stroke to others in the room
+                    // Broadcast stroke to others in the room (excluding sender)
                     socket.to(socket.roomId).emit('stroke-drawn', {
                         userId: socket.userId,
                         guestId: socket.guestId,
@@ -196,7 +191,7 @@ export const setupSocketHandlers = (io) => {
                         timestamp: Date.now(),
                     });
 
-                    // Save to database using atomic update
+                    // Save to database using atomic update ($push)
                     if (data.meetingId) {
                         await Meeting.updateOne(
                             { _id: data.meetingId },
@@ -209,7 +204,11 @@ export const setupSocketHandlers = (io) => {
             }
         });
 
-        // Draw point (live drawing feedback)
+        /**
+         * Event: draw-point
+         * Broadcasts live cursor movement/drawing points for real-time feedback.
+         * Note: These are transient and NOT saved to DB to reduce load.
+         */
         socket.on('draw-point', (data) => {
             try {
                 if (socket.roomId) {
@@ -229,18 +228,22 @@ export const setupSocketHandlers = (io) => {
             }
         });
 
-        // Clear canvas
+        /**
+         * Event: clear-canvas
+         * Clears all canvas content (strokes, stickies, text, images).
+         * Affects both the live view and the database.
+         */
         socket.on('clear-canvas', async (data) => {
             try {
                 if (socket.roomId) {
-                    // Broadcast clear to others
+                    // Broadcast clear command to others
                     socket.to(socket.roomId).emit('canvas-cleared', {
                         userId: socket.userId,
                         guestId: socket.guestId,
                         timestamp: Date.now(),
                     });
 
-                    // Update database
+                    // Update database: Clear all arrays
                     if (data.meetingId) {
                         await Meeting.updateOne(
                             { _id: data.meetingId },
@@ -260,7 +263,8 @@ export const setupSocketHandlers = (io) => {
             }
         });
 
-        // Undo stroke
+        // Event: undo-stroke
+        // Removes the last action from the canvas and database
         socket.on('undo-stroke', async (data) => {
             try {
                 if (socket.roomId) {
@@ -271,7 +275,7 @@ export const setupSocketHandlers = (io) => {
                         timestamp: Date.now(),
                     });
 
-                    // Update database
+                    // Update database: Remove last element from strokes array
                     if (data.meetingId) {
                         await Meeting.updateOne(
                             { _id: data.meetingId },
@@ -284,7 +288,8 @@ export const setupSocketHandlers = (io) => {
             }
         });
 
-        // Update stroke
+        // Event: update-stroke
+        // Handles modifications to existing strokes (move, resize, rotate)
         socket.on('update-stroke', async (data) => {
             try {
                 if (socket.roomId) {
@@ -296,8 +301,7 @@ export const setupSocketHandlers = (io) => {
                     if (data.meetingId && data.updates) {
                         const updateFields = {};
                         for (const [key, value] of Object.entries(data.updates)) {
-                            // Careful with nested object updates in Mongo arrays
-                            // For simplicity with stroke points/transforms, we might need to be smart
+                            // Update specific fields of the matching stroke in the array
                             updateFields[`canvasData.strokes.$.${key}`] = value;
                         }
 
@@ -312,7 +316,7 @@ export const setupSocketHandlers = (io) => {
             }
         });
 
-        // Add croquis
+        // --- Image/Croquis Handling ---
         socket.on('add-croquis', async (data) => {
             try {
                 if (socket.roomId) {
@@ -333,7 +337,6 @@ export const setupSocketHandlers = (io) => {
             }
         });
 
-        // Update croquis
         socket.on('update-croquis', async (data) => {
             try {
                 if (socket.roomId) {
@@ -343,18 +346,6 @@ export const setupSocketHandlers = (io) => {
                     });
 
                     if (data.meetingId) {
-                        // We construct a dynamic update object to only update changed fields
-                        // But since it's an array of objects, we need to match by ID
-                        // Mongoose Mixed type might be tricky with positional operator if not defined in schema
-                        // But let's try standard Mongo syntax.
-                        // Actually, replacing the whole object or using broad set might be safer for Mixed.
-                        // Let's try to update specific fields using arrayFilters or just pull/push if simple.
-                        // Better: Read, update, save? No, race conditions.
-                        // Let's assume standard positional operator works for Mixed arrays in Mongo.
-                        // However, to be safe with Mixed, let's just use $set with a loop or simplistic approach.
-                        // Actually, `activeConnections` is defined. `canvasData` is Mixed.
-                        // Mongo driver supports 'canvasData.croquis.$.x' if we match 'canvasData.croquis.id'.
-
                         const updateFields = {};
                         for (const [key, value] of Object.entries(data.updates)) {
                             updateFields[`canvasData.croquis.$.${key}`] = value;
@@ -371,7 +362,11 @@ export const setupSocketHandlers = (io) => {
             }
         });
 
-        // Request canvas state (for late joiners)
+        /**
+         * Event: request-canvas-state
+         * Called by a user when they first join to get the current state of the canvas.
+         * Fetches all objects (strokes, sticky notes, images, text) from DB and sends them.
+         */
         socket.on('request-canvas-state', async (data) => {
             try {
                 if (data.meetingId) {
@@ -534,7 +529,7 @@ export const setupSocketHandlers = (io) => {
             }
         });
 
-        // Handle disconnect
+        // Handle client disconnect
         socket.on('disconnect', async () => {
             try {
                 if (socket.roomId) {
@@ -567,7 +562,7 @@ export const setupSocketHandlers = (io) => {
             }
         });
 
-        // Chat Messages
+        // --- Chat Messages ---
         socket.on('send-message', async (data) => {
             try {
                 console.log('📨 Received send-message event:', {
@@ -581,6 +576,7 @@ export const setupSocketHandlers = (io) => {
                 if (socket.roomId) {
                     const { content, meetingId, userId, guestId, name } = data;
 
+                    // Save message to database
                     const newMessage = await Message.create({
                         roomId: socket.roomId,
                         meetingId,
