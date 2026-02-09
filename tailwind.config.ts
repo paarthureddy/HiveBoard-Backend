@@ -125,6 +125,13 @@ export default {
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+        'gradient-rose': 'linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--destructive)) 100%)',
+        'gradient-hero': 'radial-gradient(ellipse at top left, hsl(var(--primary)/0.15), transparent 60%)',
+      },
+      boxShadow: {
+        'soft': '0 2px 10px rgba(0, 0, 0, 0.05)',
+        'medium': '0 4px 20px rgba(0, 0, 0, 0.08)',
+        'elevated': '0 10px 30px rgba(0, 0, 0, 0.12)',
       },
     },
   },
