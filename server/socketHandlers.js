@@ -11,6 +11,37 @@ export const setupSocketHandlers = (io) => {
             try {
                 const { roomId, meetingId, userId, guestId, name, role } = data;
 
+                // Check if socket is already in a different room and leave it
+                if (socket.roomId && socket.roomId !== roomId) {
+                    console.log(`🔌 Socket ${socket.id} switching from room ${socket.roomId} to ${roomId}`);
+                    socket.leave(socket.roomId);
+
+                    // Remove from previous room's active connections in DB
+                    try {
+                        const previousRoom = await Room.findOne({ roomId: socket.roomId });
+                        if (previousRoom) {
+                            previousRoom.removeConnection(socket.id);
+                            await previousRoom.save();
+
+                            // Notify previous room
+                            const prevParticipants = previousRoom.activeConnections.map(conn => ({
+                                socketId: conn.socketId,
+                                userId: conn.userId,
+                                guestId: conn.guestId,
+                                name: conn.name,
+                                isOwner: conn.userId && conn.userId.toString() === previousRoom.owner.toString(),
+                            }));
+
+                            socket.to(socket.roomId).emit('user-left', {
+                                socketId: socket.id,
+                                participants: prevParticipants,
+                            });
+                        }
+                    } catch (err) {
+                        console.error('Error leaving previous room:', err);
+                    }
+                }
+
                 // Join the socket.io room
                 socket.join(roomId);
 
@@ -32,7 +63,7 @@ export const setupSocketHandlers = (io) => {
                 if (room) {
                     // Clean up stale connections (zombies from server restarts)
                     // DISABLED FOR DEBUGGING
-                    /* if (io.sockets && io.sockets.sockets) {
+                    if (io.sockets.sockets) {
                         const connectedSocketIds = io.sockets.sockets; // Map of socketId -> Socket
                         const initialCount = room.activeConnections.length;
                         room.activeConnections = room.activeConnections.filter(conn =>
@@ -42,7 +73,7 @@ export const setupSocketHandlers = (io) => {
                         if (initialCount !== finalCount) {
                             console.log(`🧹 Creating room: Removed ${initialCount - finalCount} stale connections`);
                         }
-                    } */
+                    }
                     // Add connection to active connections
                     room.addConnection({
                         socketId: socket.id,
