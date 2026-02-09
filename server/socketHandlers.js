@@ -62,8 +62,8 @@ export const setupSocketHandlers = (io) => {
 
                 if (room) {
                     // Clean up stale connections (zombies from server restarts)
-                    // DISABLED FOR DEBUGGING
-                    if (io.sockets.sockets) {
+                    // DISABLED FOR DEBUGGING - This was removing valid connections
+                    /* if (io.sockets.sockets) {
                         const connectedSocketIds = io.sockets.sockets; // Map of socketId -> Socket
                         const initialCount = room.activeConnections.length;
                         room.activeConnections = room.activeConnections.filter(conn =>
@@ -73,7 +73,7 @@ export const setupSocketHandlers = (io) => {
                         if (initialCount !== finalCount) {
                             console.log(`🧹 Creating room: Removed ${initialCount - finalCount} stale connections`);
                         }
-                    }
+                    } */
                     // Add connection to active connections
                     room.addConnection({
                         socketId: socket.id,
