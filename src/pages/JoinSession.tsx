@@ -157,7 +157,10 @@ const JoinSession = () => {
                         {meetingData.room && (
                             <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
                                 <Users className="w-4 h-4" />
-                                <span>{meetingData.room.participantCount} participant(s) online</span>
+                                <span>
+                                    {meetingData.room.participantCount}{' '}
+                                    {meetingData.room.participantCount === 1 ? 'participant' : 'participants'} online
+                                </span>
                             </div>
                         )}
                     </div>

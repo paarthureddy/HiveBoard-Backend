@@ -23,7 +23,38 @@ export const setupSocketHandlers = (io) => {
             try {
                 const { roomId, meetingId, userId, guestId, name, role } = data;
 
-                // Join the socket.io room channel
+                // Check if socket is already in a different room and leave it
+                if (socket.roomId && socket.roomId !== roomId) {
+                    console.log(`🔌 Socket ${socket.id} switching from room ${socket.roomId} to ${roomId}`);
+                    socket.leave(socket.roomId);
+
+                    // Remove from previous room's active connections in DB
+                    try {
+                        const previousRoom = await Room.findOne({ roomId: socket.roomId });
+                        if (previousRoom) {
+                            previousRoom.removeConnection(socket.id);
+                            await previousRoom.save();
+
+                            // Notify previous room
+                            const prevParticipants = previousRoom.activeConnections.map(conn => ({
+                                socketId: conn.socketId,
+                                userId: conn.userId,
+                                guestId: conn.guestId,
+                                name: conn.name,
+                                isOwner: conn.userId && conn.userId.toString() === previousRoom.owner.toString(),
+                            }));
+
+                            socket.to(socket.roomId).emit('user-left', {
+                                socketId: socket.id,
+                                participants: prevParticipants,
+                            });
+                        }
+                    } catch (err) {
+                        console.error('Error leaving previous room:', err);
+                    }
+                }
+
+                // Join the socket.io room
                 socket.join(roomId);
 
                 // Find or create room in MongoDB for tracking participants
@@ -42,7 +73,20 @@ export const setupSocketHandlers = (io) => {
                 }
 
                 if (room) {
-                    // Add connection to active connections list in DB
+                    // Clean up stale connections (zombies from server restarts)
+                    // DISABLED FOR DEBUGGING - This was removing valid connections
+                    /* if (io.sockets.sockets) {
+                        const connectedSocketIds = io.sockets.sockets; // Map of socketId -> Socket
+                        const initialCount = room.activeConnections.length;
+                        room.activeConnections = room.activeConnections.filter(conn =>
+                            connectedSocketIds.has(conn.socketId)
+                        );
+                        const finalCount = room.activeConnections.length;
+                        if (initialCount !== finalCount) {
+                            console.log(`🧹 Creating room: Removed ${initialCount - finalCount} stale connections`);
+                        }
+                    } */
+                    // Add connection to active connections
                     room.addConnection({
                         socketId: socket.id,
                         userId: userId || null,
@@ -50,7 +94,7 @@ export const setupSocketHandlers = (io) => {
                         name: name || 'Anonymous',
                     });
 
-                    // Add participant to the persistent list if not already added
+                    // Add participant if not already added
                     room.addParticipant({
                         userId: userId || null,
                         guestId: guestId || null,
@@ -60,20 +104,20 @@ export const setupSocketHandlers = (io) => {
 
                     await room.save();
 
-                    // Store room info in the socket object for easy access later
+                    // Store room info in socket
                     socket.roomId = roomId;
                     socket.userId = userId;
                     socket.guestId = guestId;
 
-                    // Fetch and send recent chat history
+                    // Get chat history
                     const messages = await Message.find({ roomId })
                         .sort({ timestamp: -1 })
                         .limit(50);
 
-                    // Emit history reversed (oldest first) so it displays correctly
+                    // Emit history reversed (oldest first)
                     socket.emit('chat-history', messages.reverse());
 
-                    // Get updated list of all active participants
+                    // Get all active participants
                     const participants = room.activeConnections.map(conn => ({
                         socketId: conn.socketId,
                         userId: conn.userId ? conn.userId.toString() : null,
@@ -85,14 +129,14 @@ export const setupSocketHandlers = (io) => {
                     console.log('📊 Active Connections in DB:', room.activeConnections.length);
                     console.log('📋 Generated Participants List:', participants);
 
-                    // Notify the user that they have successfully joined
+                    // Notify user they joined
                     socket.emit('room-joined', {
                         roomId,
                         participants,
                         role: userId && userId.toString() === room.owner.toString() ? 'owner' : role || 'guest',
                     });
 
-                    // Notify all other users in the room that someone joined
+                    // Notify others in the room
                     socket.to(roomId).emit('user-joined', {
                         socketId: socket.id,
                         userId,
@@ -100,469 +144,56 @@ export const setupSocketHandlers = (io) => {
                         name,
                         participants,
                     });
-
-                    console.log(`👤 User ${name} joined room ${roomId}`);
                 }
             } catch (error) {
                 console.error('Error joining room:', error);
-                socket.emit('error', { message: 'Failed to join room' });
             }
         });
 
-        /**
-         * Event: leave-room
-         * Handles explicit disconnections or user leaving the page.
-         * - Removes the user from the active connections list
-         * - Notifies others that the user left
-         */
-        socket.on('leave-room', async () => {
-            try {
-                if (socket.roomId) {
-                    const room = await Room.findOne({ roomId: socket.roomId });
-
-                    if (room) {
-                        // Remove connection from DB
-                        room.removeConnection(socket.id);
-                        await room.save();
-
-                        // Get updated participants list
-                        const participants = room.activeConnections.map(conn => ({
-                            socketId: conn.socketId,
-                            userId: conn.userId,
-                            guestId: conn.guestId,
-                            name: conn.name,
-                            isOwner: conn.userId && conn.userId.toString() === room.owner.toString(),
-                        }));
-
-                        // Notify others
-                        socket.to(socket.roomId).emit('user-left', {
-                            socketId: socket.id,
-                            participants,
-                        });
-
-                        socket.leave(socket.roomId);
-                        console.log(`👋 User left room ${socket.roomId}`);
-                    }
-                }
-            } catch (error) {
-                console.error('Error leaving room:', error);
-            }
+        // Handle canvas updates (strokes, shapes, etc.)
+        socket.on('canvas-update', (data) => {
+            // Broadcast to everyone else in the room
+            socket.to(socket.roomId).emit('canvas-update', data);
         });
 
-        // Helper event to fetch current participants
-        socket.on('get-participants', async () => {
-            try {
-                if (socket.roomId) {
-                    const room = await Room.findOne({ roomId: socket.roomId });
-
-                    if (room) {
-                        const participants = room.activeConnections.map(conn => ({
-                            socketId: conn.socketId,
-                            userId: conn.userId,
-                            guestId: conn.guestId,
-                            name: conn.name,
-                            isOwner: conn.userId && conn.userId.toString() === room.owner.toString(),
-                        }));
-
-                        socket.emit('participants-list', participants);
-                    }
-                }
-            } catch (error) {
-                console.error('Error getting participants:', error);
-            }
-        });
-
-        // --- Real-time Drawing Events ---
-
-        /**
-         * Event: draw-stroke
-         * Broadcasts a completed drawing stroke to all other users.
-         * Also saves the stroke to the database for persistence.
-         */
-        socket.on('draw-stroke', async (data) => {
-            try {
-                if (socket.roomId) {
-                    // Broadcast stroke to others in the room (excluding sender)
-                    socket.to(socket.roomId).emit('stroke-drawn', {
-                        userId: socket.userId,
-                        guestId: socket.guestId,
-                        socketId: socket.id,
-                        stroke: data.stroke,
-                        timestamp: Date.now(),
-                    });
-
-                    // Save to database using atomic update ($push)
-                    if (data.meetingId) {
-                        await Meeting.updateOne(
-                            { _id: data.meetingId },
-                            { $push: { 'canvasData.strokes': data.stroke } }
-                        );
-                    }
-                }
-            } catch (error) {
-                console.error('Error broadcasting stroke:', error);
-            }
-        });
-
-        /**
-         * Event: draw-point
-         * Broadcasts live cursor movement/drawing points for real-time feedback.
-         * Note: These are transient and NOT saved to DB to reduce load.
-         */
-        socket.on('draw-point', (data) => {
-            try {
-                if (socket.roomId) {
-                    // Broadcast point to others for live preview
-                    socket.to(socket.roomId).emit('point-drawn', {
-                        userId: socket.userId,
-                        guestId: socket.guestId,
-                        socketId: socket.id,
-                        point: data.point,
-                        strokeId: data.strokeId,
-                        color: data.color,
-                        width: data.width,
-                    });
-                }
-            } catch (error) {
-                console.error('Error broadcasting point:', error);
-            }
-        });
-
-        /**
-         * Event: clear-canvas
-         * Clears all canvas content (strokes, stickies, text, images).
-         * Affects both the live view and the database.
-         */
-        socket.on('clear-canvas', async (data) => {
-            try {
-                if (socket.roomId) {
-                    // Broadcast clear command to others
-                    socket.to(socket.roomId).emit('canvas-cleared', {
-                        userId: socket.userId,
-                        guestId: socket.guestId,
-                        timestamp: Date.now(),
-                    });
-
-                    // Update database: Clear all arrays
-                    if (data.meetingId) {
-                        await Meeting.updateOne(
-                            { _id: data.meetingId },
-                            {
-                                $set: {
-                                    'canvasData.strokes': [],
-                                    'canvasData.stickyNotes': [],
-                                    'canvasData.textItems': [],
-                                    'canvasData.croquis': []
-                                }
-                            }
-                        );
-                    }
-                }
-            } catch (error) {
-                console.error('Error clearing canvas:', error);
-            }
-        });
-
-        // Event: undo-stroke
-        // Removes the last action from the canvas and database
-        socket.on('undo-stroke', async (data) => {
-            try {
-                if (socket.roomId) {
-                    // Broadcast undo to others
-                    socket.to(socket.roomId).emit('stroke-undone', {
-                        userId: socket.userId,
-                        guestId: socket.guestId,
-                        timestamp: Date.now(),
-                    });
-
-                    // Update database: Remove last element from strokes array
-                    if (data.meetingId) {
-                        await Meeting.updateOne(
-                            { _id: data.meetingId },
-                            { $pop: { 'canvasData.strokes': 1 } }
-                        );
-                    }
-                }
-            } catch (error) {
-                console.error('Error undoing stroke:', error);
-            }
-        });
-
-        // Event: update-stroke
-        // Handles modifications to existing strokes (move, resize, rotate)
-        socket.on('update-stroke', async (data) => {
-            try {
-                if (socket.roomId) {
-                    socket.to(socket.roomId).emit('stroke-updated', {
-                        ...data,
-                        timestamp: Date.now(),
-                    });
-
-                    if (data.meetingId && data.updates) {
-                        const updateFields = {};
-                        for (const [key, value] of Object.entries(data.updates)) {
-                            // Update specific fields of the matching stroke in the array
-                            updateFields[`canvasData.strokes.$.${key}`] = value;
-                        }
-
-                        await Meeting.updateOne(
-                            { _id: data.meetingId, 'canvasData.strokes.id': data.id },
-                            { $set: updateFields }
-                        );
-                    }
-                }
-            } catch (error) {
-                console.error('Error updating stroke:', error);
-            }
-        });
-
-        // --- Image/Croquis Handling ---
-        socket.on('add-croquis', async (data) => {
-            try {
-                if (socket.roomId) {
-                    socket.to(socket.roomId).emit('croquis-added', {
-                        ...data,
-                        timestamp: Date.now(),
-                    });
-
-                    if (data.meetingId) {
-                        await Meeting.updateOne(
-                            { _id: data.meetingId },
-                            { $push: { 'canvasData.croquis': data.item } }
-                        );
-                    }
-                }
-            } catch (error) {
-                console.error('Error adding croquis:', error);
-            }
-        });
-
-        socket.on('update-croquis', async (data) => {
-            try {
-                if (socket.roomId) {
-                    socket.to(socket.roomId).emit('croquis-updated', {
-                        ...data,
-                        timestamp: Date.now(),
-                    });
-
-                    if (data.meetingId) {
-                        const updateFields = {};
-                        for (const [key, value] of Object.entries(data.updates)) {
-                            updateFields[`canvasData.croquis.$.${key}`] = value;
-                        }
-
-                        await Meeting.updateOne(
-                            { _id: data.meetingId, 'canvasData.croquis.id': data.id },
-                            { $set: updateFields }
-                        );
-                    }
-                }
-            } catch (error) {
-                console.error('Error updating croquis:', error);
-            }
-        });
-
-        /**
-         * Event: request-canvas-state
-         * Called by a user when they first join to get the current state of the canvas.
-         * Fetches all objects (strokes, sticky notes, images, text) from DB and sends them.
-         */
-        socket.on('request-canvas-state', async (data) => {
-            try {
-                if (data.meetingId) {
-                    const meeting = await Meeting.findById(data.meetingId);
-                    if (meeting && meeting.canvasData) {
-                        socket.emit('canvas-state', {
-                            strokes: meeting.canvasData.strokes || [],
-                            croquis: meeting.canvasData.croquis || [],
-                            stickyNotes: meeting.canvasData.stickyNotes || [],
-                            textItems: meeting.canvasData.textItems || [],
-                        });
-                    }
-                }
-            } catch (error) {
-                console.error('Error fetching canvas state:', error);
-            }
-        });
-
-        // --- Sticky Notes ---
-
-        socket.on('add-sticky', async (data) => {
-            try {
-                if (socket.roomId) {
-                    socket.to(socket.roomId).emit('sticky-added', {
-                        ...data,
-                        timestamp: Date.now(),
-                    });
-
-                    if (data.meetingId) {
-                        await Meeting.updateOne(
-                            { _id: data.meetingId },
-                            { $push: { 'canvasData.stickyNotes': data.note } }
-                        );
-                    }
-                }
-            } catch (error) {
-                console.error('Error adding sticky:', error);
-            }
-        });
-
-        socket.on('update-sticky', async (data) => {
-            try {
-                if (socket.roomId) {
-                    socket.to(socket.roomId).emit('sticky-updated', {
-                        ...data,
-                        timestamp: Date.now(),
-                    });
-
-                    if (data.meetingId) {
-                        const updateFields = {};
-                        for (const [key, value] of Object.entries(data.updates)) {
-                            updateFields[`canvasData.stickyNotes.$.${key}`] = value;
-                        }
-                        await Meeting.updateOne(
-                            { _id: data.meetingId, 'canvasData.stickyNotes.id': data.id },
-                            { $set: updateFields }
-                        );
-                    }
-                }
-            } catch (error) {
-                console.error('Error updating sticky:', error);
-            }
-        });
-
-        socket.on('delete-sticky', async (data) => {
-            try {
-                if (socket.roomId) {
-                    socket.to(socket.roomId).emit('sticky-deleted', {
-                        id: data.id,
-                        timestamp: Date.now(),
-                    });
-
-                    if (data.meetingId) {
-                        await Meeting.updateOne(
-                            { _id: data.meetingId },
-                            { $pull: { 'canvasData.stickyNotes': { id: data.id } } }
-                        );
-                    }
-                }
-            } catch (error) {
-                console.error('Error deleting sticky:', error);
-            }
-        });
-
-        // --- Text Items ---
-
-        socket.on('add-text', async (data) => {
-            try {
-                if (socket.roomId) {
-                    socket.to(socket.roomId).emit('text-added', {
-                        ...data,
-                        timestamp: Date.now(),
-                    });
-
-                    if (data.meetingId) {
-                        await Meeting.updateOne(
-                            { _id: data.meetingId },
-                            { $push: { 'canvasData.textItems': data.item } }
-                        );
-                    }
-                }
-            } catch (error) {
-                console.error('Error adding text:', error);
-            }
-        });
-
-        socket.on('update-text', async (data) => {
-            try {
-                if (socket.roomId) {
-                    socket.to(socket.roomId).emit('text-updated', {
-                        ...data,
-                        timestamp: Date.now(),
-                    });
-
-                    if (data.meetingId) {
-                        const updateFields = {};
-                        for (const [key, value] of Object.entries(data.updates)) {
-                            updateFields[`canvasData.textItems.$.${key}`] = value;
-                        }
-                        await Meeting.updateOne(
-                            { _id: data.meetingId, 'canvasData.textItems.id': data.id },
-                            { $set: updateFields }
-                        );
-                    }
-                }
-            } catch (error) {
-                console.error('Error updating text:', error);
-            }
-        });
-
-        socket.on('delete-text', async (data) => {
-            try {
-                if (socket.roomId) {
-                    socket.to(socket.roomId).emit('text-deleted', {
-                        id: data.id,
-                        timestamp: Date.now(),
-                    });
-
-                    if (data.meetingId) {
-                        await Meeting.updateOne(
-                            { _id: data.meetingId },
-                            { $pull: { 'canvasData.textItems': { id: data.id } } }
-                        );
-                    }
-                }
-            } catch (error) {
-                console.error('Error deleting text:', error);
-            }
-        });
-
-        // Cursor move (optional - for showing other users' cursors)
+        // Handle cursor movement
         socket.on('cursor-move', (data) => {
-            if (socket.roomId) {
-                socket.to(socket.roomId).emit('cursor-moved', {
-                    socketId: socket.id,
-                    userId: socket.userId,
-                    guestId: socket.guestId,
-                    position: data.position,
-                });
-            }
+            socket.to(socket.roomId).emit('cursor-move', {
+                userId: socket.userId,
+                guestId: socket.guestId,
+                socketId: socket.id,
+                position: data.position,
+                color: socket.color // You might want to store color in socket on join or update
+            });
         });
 
-        // Handle client disconnect
-        socket.on('disconnect', async () => {
-            try {
-                if (socket.roomId) {
-                    const room = await Room.findOne({ roomId: socket.roomId });
-
-                    if (room) {
-                        // Remove connection
-                        room.removeConnection(socket.id);
-                        await room.save();
-
-                        // Get updated participants
-                        const participants = room.activeConnections.map(conn => ({
-                            socketId: conn.socketId,
-                            userId: conn.userId,
-                            guestId: conn.guestId,
-                            name: conn.name,
-                            isOwner: conn.userId && conn.userId.toString() === room.owner.toString(),
-                        }));
-
-                        // Notify others
-                        socket.to(socket.roomId).emit('user-left', {
-                            socketId: socket.id,
-                            participants,
-                        });
-                    }
-                }
-                console.log(`❌ Client disconnected: ${socket.id}`);
-            } catch (error) {
-                console.error('Error handling disconnect:', error);
-            }
+        // Handle drawing events
+        socket.on('draw-stroke', (data) => {
+            socket.to(socket.roomId).emit('draw-stroke', data);
         });
 
-        // --- Chat Messages ---
+        socket.on('draw-point', (data) => {
+            socket.to(socket.roomId).emit('draw-point', data);
+        });
+
+        socket.on('clear-canvas', (data) => {
+            socket.to(socket.roomId).emit('clear-canvas', data);
+        });
+
+        socket.on('undo-stroke', (data) => {
+            socket.to(socket.roomId).emit('undo-stroke', data);
+        });
+
+        // Croquis Events
+        socket.on('add-croquis', (data) => {
+            socket.to(socket.roomId).emit('add-croquis', data);
+        });
+
+        socket.on('update-croquis', (data) => {
+            socket.to(socket.roomId).emit('update-croquis', data);
+        });
+
+        // Chat Messages
         socket.on('send-message', async (data) => {
             try {
                 console.log('📨 Received send-message event:', {
@@ -576,7 +207,6 @@ export const setupSocketHandlers = (io) => {
                 if (socket.roomId) {
                     const { content, meetingId, userId, guestId, name } = data;
 
-                    // Save message to database
                     const newMessage = await Message.create({
                         roomId: socket.roomId,
                         meetingId,
@@ -598,6 +228,102 @@ export const setupSocketHandlers = (io) => {
                 }
             } catch (error) {
                 console.error('Error sending message:', error);
+            }
+        });
+
+        // Sticky Notes
+        socket.on('add-sticky', (data) => {
+            socket.to(socket.roomId).emit('add-sticky', data);
+        });
+
+        socket.on('update-sticky', (data) => {
+            socket.to(socket.roomId).emit('update-sticky', data);
+        });
+
+        socket.on('delete-sticky', (data) => {
+            socket.to(socket.roomId).emit('delete-sticky', data);
+        });
+
+        // Text Items
+        socket.on('add-text', (data) => {
+            socket.to(socket.roomId).emit('add-text', data);
+        });
+
+        socket.on('update-text', (data) => {
+            socket.to(socket.roomId).emit('update-text', data);
+        });
+
+        socket.on('delete-text', (data) => {
+            socket.to(socket.roomId).emit('delete-text', data);
+        });
+
+
+        // Disconnect
+        socket.on('disconnect', async () => {
+            console.log(` Client disconnected: ${socket.id}`);
+            try {
+                if (socket.roomId) {
+                    const room = await Room.findOne({ roomId: socket.roomId });
+                    if (room) {
+                        room.removeConnection(socket.id);
+                        await room.save();
+
+                        // Notify room
+                        const participants = room.activeConnections.map(conn => ({
+                            socketId: conn.socketId,
+                            userId: conn.userId,
+                            guestId: conn.guestId,
+                            name: conn.name,
+                            isOwner: conn.userId && conn.userId.toString() === room.owner.toString(),
+                        }));
+
+                        socket.to(socket.roomId).emit('user-left', {
+                            socketId: socket.id,
+                            participants,
+                        });
+
+                        socket.leave(socket.roomId);
+                        console.log(`👋 User left room ${socket.roomId}`);
+                    }
+                }
+            } catch (error) {
+                console.error('Error leaving room:', error);
+            }
+        });
+
+        // Get participants
+        socket.on('get-participants', async () => {
+            try {
+                if (socket.roomId) {
+                    const room = await Room.findOne({ roomId: socket.roomId });
+
+                    if (room) {
+                        // Clean up stale connections here too
+                        /* if (io.sockets && io.sockets.sockets) {
+                            const connectedSocketIds = io.sockets.sockets;
+                            let changed = false;
+                            const initialLen = room.activeConnections.length;
+                            room.activeConnections = room.activeConnections.filter(conn =>
+                                connectedSocketIds.has(conn.socketId)
+                            );
+                            if (room.activeConnections.length !== initialLen) {
+                                await room.save();
+                            }
+                        } */
+
+                        const participants = room.activeConnections.map(conn => ({
+                            socketId: conn.socketId,
+                            userId: conn.userId,
+                            guestId: conn.guestId,
+                            name: conn.name,
+                            isOwner: conn.userId && conn.userId.toString() === room.owner.toString(),
+                        }));
+
+                        socket.emit('participants-list', participants);
+                    }
+                }
+            } catch (error) {
+                console.error('Error getting participants:', error);
             }
         });
     });
