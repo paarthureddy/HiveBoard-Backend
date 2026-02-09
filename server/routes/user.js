@@ -97,6 +97,9 @@ router.get('/report', protect, async (req, res) => {
         const newTotalTime = Math.max(history.accumulatedTimeMinutes || 0, liveTime);
 
         // We can save these back.
+        if (!user.reportData) {
+            user.reportData = {};
+        }
         user.reportData.accumulatedStrokes = newTotalStrokes;
         user.reportData.accumulatedTimeMinutes = newTotalTime;
         user.reportData.lastReportDate = Date.now();

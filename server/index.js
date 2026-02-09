@@ -95,8 +95,12 @@ app.use((err, req, res, next) => {
 // Start the server and listen on the specified port
 const PORT = process.env.PORT || 5000;
 
-httpServer.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📡 API available at http://localhost:${PORT}/api`);
-    console.log(`🔌 WebSocket server ready`);
-});
+if (process.env.NODE_ENV !== 'test') {
+    httpServer.listen(PORT, () => {
+        console.log(`🚀 Server running on port ${PORT}`);
+        console.log(`📡 API available at http://localhost:${PORT}/api`);
+        console.log(`🔌 WebSocket server ready`);
+    });
+}
+
+export { app, httpServer };
