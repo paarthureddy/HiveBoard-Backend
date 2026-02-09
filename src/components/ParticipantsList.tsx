@@ -70,7 +70,7 @@ const ParticipantsList: React.FC<ParticipantsListProps> = ({
                         animate={{ x: 0 }}
                         exit={{ x: '100%' }}
                         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                        className="fixed top-0 right-0 h-full w-80 bg-card border-l border-border shadow-elevated z-50 flex flex-col"
+                        className="fixed top-0 right-0 h-full w-full sm:w-80 bg-card border-l border-border shadow-elevated z-50 flex flex-col"
                     >
                         {/* Header */}
                         <div className="flex items-center justify-between p-4 border-b border-border bg-muted/30">

@@ -141,7 +141,7 @@ const AiChatPanel = ({
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: 300 }}
                         transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                        className="fixed right-6 bottom-24 w-80 h-[500px] bg-card border border-border rounded-2xl shadow-elevated flex flex-col overflow-hidden z-30"
+                        className="fixed md:right-6 md:bottom-24 md:w-80 md:h-[500px] md:rounded-2xl inset-0 w-full h-full md:inset-auto bg-card border border-border flex flex-col overflow-hidden z-[60]"
                     >
                         {/* Header */}
                         <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-violet-50 dark:bg-violet-900/10">
@@ -154,6 +154,9 @@ const AiChatPanel = ({
                                     <p className="text-xs text-muted-foreground">Context Aware Partner</p>
                                 </div>
                             </div>
+                            <Button variant="ghost" size="icon" className="md:hidden" onClick={onToggle}>
+                                <X className="w-4 h-4" />
+                            </Button>
                         </div>
 
                         {/* Messages */}

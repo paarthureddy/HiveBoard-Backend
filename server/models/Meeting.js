@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 
+// MongoDB Schema for storing Meeting/Canvas data
 const meetingSchema = new mongoose.Schema({
     title: {
         type: String,
@@ -7,11 +8,14 @@ const meetingSchema = new mongoose.Schema({
         trim: true,
         default: 'Untitled Meeting',
     },
+    // Reference to the user who created the meeting
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true,
     },
+    // Stores all canvas elements (strokes, sticky notes, images, etc.)
+    // Uses 'Mixed' type because the structure is complex and dynamic
     canvasData: {
         type: mongoose.Schema.Types.Mixed,
         default: {},
@@ -20,6 +24,7 @@ const meetingSchema = new mongoose.Schema({
         type: String,
         default: '',
     },
+    // Token for invite links
     inviteToken: {
         type: String,
         unique: true,
@@ -33,6 +38,7 @@ const meetingSchema = new mongoose.Schema({
         type: Boolean,
         default: true,
     },
+    // List of users who have access to this meeting
     participants: [{
         userId: {
             type: mongoose.Schema.Types.ObjectId,
@@ -58,7 +64,7 @@ const meetingSchema = new mongoose.Schema({
     },
 });
 
-// Update the updatedAt timestamp before saving
+// Middleware: Automatically update the 'updatedAt' timestamp before saving
 meetingSchema.pre('save', function (next) {
     this.updatedAt = Date.now();
     next();

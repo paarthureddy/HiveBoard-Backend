@@ -16,17 +16,27 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 const App = () => (
+  // Provide React Query client for data fetching and caching
   <QueryClientProvider client={queryClient}>
+    {/* AuthProvider handles user authentication state (login, logout, user data) */}
     <AuthProvider>
+      {/* GuestProvider manages temporary guest sessions for non-registered users */}
       <GuestProvider>
+        {/* TooltipProvider enables tooltip functionality across the app */}
         <TooltipProvider>
+          {/* Toast notifications for user feedback */}
           <Toaster />
           <Sonner />
+
+          {/* Client-side routing */}
           <BrowserRouter>
             <Routes>
+              {/* Public Routes */}
               <Route path="/" element={<Landing />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/join/:token" element={<JoinSession />} />
+
+              {/* Protected Routes (Require Login) */}
               <Route
                 path="/home"
                 element={
@@ -35,10 +45,14 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
+
+              {/* Canvas Route (Accessed by both users and guests) */}
               <Route
                 path="/canvas"
                 element={<Canvas />}
               />
+
+              {/* Catch-all 404 Route */}
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

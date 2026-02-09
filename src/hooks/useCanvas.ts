@@ -228,8 +228,7 @@ export const useCanvas = (options: UseCanvasOptions = {}) => {
     const point = getCanvasPoint(e);
     if (!point) return;
 
-    // Safety: Ensure we never draw a stroke if tool is 'fill'
-    if (tool === 'fill') return;
+
 
     setIsDrawing(true);
     currentStrokeIdRef.current = crypto.randomUUID();

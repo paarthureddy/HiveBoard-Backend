@@ -65,28 +65,34 @@ const MOCK_MESSAGES: ChatMessage[] = [];
 const Canvas = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, isAuthenticated } = useAuth();
-  const { guestUser, isGuest } = useGuest();
-  const isReadOnly = !isAuthenticated;
 
-  // Get meeting ID from URL
+  // --- Authentication State ---
+  // Determine if the current user is a registered member or a guest
+  const { user, isAuthenticated } = useAuth();
+  const { guestUser, isGuest, setGuestUser } = useGuest();
+  const isReadOnly = !isAuthenticated; // Flag for restricted features
+
+  // --- URL Parameters ---
+  // specific meeting and room IDs are extracted to connect to the correct session
   const searchParams = new URLSearchParams(location.search);
   const meetingId = searchParams.get('meetingId');
   const roomIdParam = searchParams.get('roomId');
 
-  // Sticky Note & Text & Croquis State
-  const [stickyNotes, setStickyNotes] = useState<StickyNote[]>([]);
-  const [textItems, setTextItems] = useState<TextItem[]>([]);
-  const [croquisItems, setCroquisItems] = useState<CroquisItem[]>([]);
+  // --- Canvas Object States ---
+  // Local state for various interactive elements on the board
+  const [stickyNotes, setStickyNotes] = useState<StickyNote[]>([]); // Yellow sticky notes
+  const [textItems, setTextItems] = useState<TextItem[]>([]); // Text labels
+  const [croquisItems, setCroquisItems] = useState<CroquisItem[]>([]); // Images/figures
 
-  // Unified Selection State
+  // --- Selection State ---
+  // Tracks which object is currently selected for editing (move, resize, rotate)
+  // Unified to handle different types via a single transformer component
   const [selectedObject, setSelectedObject] = useState<{ id: string; type: 'sticky' | 'text' | 'croquis' | 'stroke' } | null>(null);
 
   // Prevent conflicting with existing logic
   // const [selectedCroquisId, setSelectedCroquisId] = useState<string | null>(null); // Replaced by selectedObject
 
-  const { setGuestUser } = useGuest();
-
+  // Auto-generate guest identity if not authenticated and not already a guest
   // Auto-generate guest identity if not authenticated and not already a guest
   useEffect(() => {
     if (!isAuthenticated && !guestUser) {
@@ -99,7 +105,7 @@ const Canvas = () => {
         role: 'guest'
       });
     }
-  }, [isAuthenticated, guestUser, setGuestUser, meetingId, roomIdParam]);
+  }, [isAuthenticated, guestUser, meetingId, roomIdParam, setGuestUser]);
 
   const [stickyColor, setStickyColor] = useState('#fef3c7'); // Default yellow
   const [canvasBg, setCanvasBg] = useState('#F8F9FA'); // Default canvas bg

@@ -24,6 +24,7 @@ export const FloatingDock = ({
     return (
         <>
             <FloatingDockDesktop items={items} className={desktopClassName} orientation={orientation} />
+            <FloatingDockMobile items={items} className={mobileClassName} />
         </>
     );
 };
@@ -35,7 +36,21 @@ const FloatingDockMobile = ({
     items: { title: string; icon: React.ReactNode; href?: string; onClick?: () => void; disableMagnification?: boolean }[];
     className?: string;
 }) => {
-    return null;
+    return (
+        <div className={cn("fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex gap-4 md:hidden", className)}>
+            <motion.div
+                className="flex flex-row gap-3 items-center rounded-2xl bg-card/80 backdrop-blur-md border border-border/50 shadow-elevated px-4 py-3 max-w-[90vw] overflow-x-auto no-scrollbar"
+            >
+                {items.map((item) => (
+                    <div key={item.title} onClick={item.onClick} className="relative group">
+                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-secondary/50 border border-border/50">
+                            {item.icon}
+                        </div>
+                    </div>
+                ))}
+            </motion.div>
+        </div>
+    );
 };
 
 const FloatingDockDesktop = ({
@@ -53,7 +68,7 @@ const FloatingDockDesktop = ({
             onMouseMove={(e) => mousePos.set(orientation === "vertical" ? e.pageY : e.pageX)}
             onMouseLeave={() => mousePos.set(Infinity)}
             className={cn(
-                "mx-auto flex gap-4 items-center rounded-2xl bg-card/80 backdrop-blur-md border border-border/50 shadow-elevated",
+                "hidden md:flex mx-auto gap-4 items-center rounded-2xl bg-card/80 backdrop-blur-md border border-border/50 shadow-elevated",
                 orientation === "vertical"
                     ? "flex-col w-16 h-auto py-4 overflow-visible" // Vertical styles: allow popups to extend out
                     : "flex-row h-16 px-4 max-w-[95vw] overflow-x-auto overflow-y-hidden", // Horizontal styles: scroll if needed

@@ -75,7 +75,7 @@ const ChatPanel = ({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 300 }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="fixed right-24 bottom-24 w-80 h-[500px] bg-card border border-border rounded-2xl shadow-elevated flex flex-col overflow-hidden z-30"
+            className="fixed md:right-24 md:bottom-24 md:w-80 md:h-[500px] md:rounded-2xl inset-0 w-full h-full md:inset-auto bg-card border border-border flex flex-col overflow-hidden z-[60]"
           >
             {/* Header */}
             <div className="px-4 py-3 border-b border-border flex items-center justify-between">
@@ -85,6 +85,9 @@ const ChatPanel = ({
                   {users.filter(u => u.isOnline).length} online
                 </p>
               </div>
+              <Button variant="ghost" size="icon" className="md:hidden" onClick={onToggle}>
+                <X className="w-4 h-4" />
+              </Button>
             </div>
 
             {/* Messages */}
