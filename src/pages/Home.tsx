@@ -25,7 +25,16 @@ import {
     Edit2,
     Check,
     X,
+    Users,
 } from 'lucide-react';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+    DialogFooter,
+} from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
 import logo from '@/assets/hive-logo.jpg';
@@ -44,6 +53,8 @@ const Home = () => {
     const inputRef = useRef<HTMLInputElement>(null);
     const [downloadingMeeting, setDownloadingMeeting] = useState<Meeting | null>(null);
     const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+    const [joinMeetingId, setJoinMeetingId] = useState('');
+    const [joinModalOpen, setJoinModalOpen] = useState(false);
 
     useEffect(() => {
         fetchMeetings();
@@ -89,6 +100,13 @@ const Home = () => {
 
     const handleOpenMeeting = (meetingId: string) => {
         navigate(`/canvas?meetingId=${meetingId}`);
+    };
+
+    const handleJoinMeeting = () => {
+        if (!joinMeetingId.trim()) return;
+        setJoinModalOpen(false);
+        navigate(`/canvas?meetingId=${joinMeetingId}`);
+        setJoinMeetingId('');
     };
 
     const handleShare = (e: React.MouseEvent, meeting: Meeting) => {
@@ -298,6 +316,36 @@ const Home = () => {
                             <Plus className="w-5 h-5 mr-2 group-hover:rotate-90 transition-transform duration-300" />
                             Create New Meeting
                         </Button>
+
+                        <Dialog open={joinModalOpen} onOpenChange={setJoinModalOpen}>
+                            <DialogTrigger asChild>
+                                <Button
+                                    size="lg"
+                                    className="bg-primary text-primary-foreground hover:opacity-90 shadow-glow ml-4 group"
+                                >
+                                    <Users className="w-5 h-5 mr-2" />
+                                    Join a Meeting
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>Join a Meeting</DialogTitle>
+                                </DialogHeader>
+                                <div className="py-4">
+                                    <Input
+                                        placeholder="Enter Meeting ID"
+                                        value={joinMeetingId}
+                                        onChange={(e) => setJoinMeetingId(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') handleJoinMeeting();
+                                        }}
+                                    />
+                                </div>
+                                <DialogFooter>
+                                    <Button onClick={handleJoinMeeting} disabled={!joinMeetingId.trim()}>Join</Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
                     </motion.div>
 
                     {/* Meetings Grid */}
