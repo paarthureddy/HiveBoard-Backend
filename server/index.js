@@ -38,6 +38,9 @@ const io = new Server(httpServer, {
         credentials: true,
     },
     maxHttpBufferSize: 1e8, // Increase buffer size to 100 MB for large image uploads
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    transports: ['websocket', 'polling'],
 });
 
 // Setup Socket.io event handlers (drawing, chat, etc.)

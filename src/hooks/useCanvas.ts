@@ -48,6 +48,10 @@ export const useCanvas = (options: UseCanvasOptions = {}) => {
   const offsetRef = useRef<Point>({ x: 0, y: 0 });
   const [scaleUI, setScaleUI] = useState(0.55); // Read-only for UI display
 
+  // Canvas World Size - Define a fixed canvas area (in world coordinates)
+  const CANVAS_WORLD_WIDTH = 4000; // 4000px wide canvas
+  const CANVAS_WORLD_HEIGHT = 3000; // 3000px tall canvas
+
   // Request Animation Frame control
   const requestRedrawRef = useRef<() => void>(() => { });
 
@@ -422,6 +426,15 @@ export const useCanvas = (options: UseCanvasOptions = {}) => {
       // Reset composite operation
       ctx.restore(); // Restore from rotation/style
     };
+
+    // Draw Canvas Boundary
+    ctx.save();
+    ctx.strokeStyle = '#E0E0E0';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([10, 5]);
+    ctx.strokeRect(0, 0, CANVAS_WORLD_WIDTH, CANVAS_WORLD_HEIGHT);
+    ctx.setLineDash([]);
+    ctx.restore();
 
     // Draw Strokes
     strokes.forEach(s => paintStroke(s));

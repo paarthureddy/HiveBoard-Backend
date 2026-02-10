@@ -189,6 +189,88 @@ const Canvas = () => {
     }
   });
 
+  // --- Socket.io Integration ---
+  // Connects socket events to local state updates
+  useSocket({
+    // Initial State Load
+    onCanvasState: (data) => {
+      console.log('Load Canvas State', data); // Debug
+      if (data.strokes) setInitialStrokes(data.strokes);
+      if (data.stickyNotes) setStickyNotes(data.stickyNotes);
+      if (data.textItems) setTextItems(data.textItems);
+      if (data.croquis) setCroquisItems(data.croquis);
+    },
+
+    // Auto-update participants list
+    onParticipantsList: (users) => {
+      setParticipants(users);
+    },
+    onRoomJoined: (data) => {
+      console.log('Joined Room', data);
+      if (data.participants) setParticipants(data.participants);
+    },
+    onUserJoined: (data) => {
+      console.log('User Joined', data);
+      if (data.participants) setParticipants(data.participants);
+    },
+    onUserLeft: (data) => {
+      if (data.participants) setParticipants(data.participants);
+    },
+
+    // Real-time Drawing Events
+    onStrokeDrawn: ({ stroke }) => {
+      drawRemoteStroke(stroke);
+    },
+    onPointDrawn: ({ point, strokeId, color, width }) => {
+      drawRemotePoint(point, strokeId, color, width);
+    },
+    onCanvasCleared: () => {
+      clearCanvasRemote();
+    },
+    onStrokeUndone: () => {
+      undoRemote();
+    },
+
+    // Object Events
+    onStickyAdded: ({ note }) => {
+      setStickyNotes(prev => [...prev, note]);
+    },
+    onStickyUpdated: ({ id, updates }) => {
+      setStickyNotes(prev => prev.map(n => n.id === id ? { ...n, ...updates } : n));
+    },
+    onStickyDeleted: ({ id }) => {
+      setStickyNotes(prev => prev.filter(n => n.id !== id));
+    },
+
+    onTextAdded: ({ item }) => {
+      setTextItems(prev => [...prev, item]);
+    },
+    onTextUpdated: ({ id, updates }) => {
+      setTextItems(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    },
+    onTextDeleted: ({ id }) => {
+      setTextItems(prev => prev.filter(t => t.id !== id));
+    },
+
+    onCroquisAdded: ({ item }) => {
+      setCroquisItems(prev => [...prev, item]);
+    },
+    onCroquisUpdated: ({ id, updates }) => {
+      setCroquisItems(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+    },
+
+    // Chat
+    onChatHistory: (history) => {
+      setMessages(history);
+    },
+    onReceiveMessage: (msg) => {
+      setMessages(prev => [...prev, msg]);
+      if (!isChatOpen && !isAiChatOpen) {
+        // Optional: Show notification dot
+      }
+    }
+  });
+
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isAiChatOpen, setIsAiChatOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>(MOCK_MESSAGES);
@@ -1326,7 +1408,17 @@ const Canvas = () => {
           {/* Grid Canvas - Z-0 */}
           <canvas ref={gridCanvasRef} className="absolute inset-0 pointer-events-none z-0" />
           {/* Main Drawing Canvas - Z-10 */}
-          <canvas ref={canvasRef} className={`w-full h-full touch-none ${tool === 'select' ? 'pointer-events-none' : (isPanning || isSpacePressed ? 'cursor-grab active:cursor-grabbing' : isReadOnly ? 'cursor-not-allowed' : 'cursor-crosshair')}`} />
+          <canvas
+            ref={canvasRef}
+            className={`w-full h-full touch-none ${tool === 'select' ? 'pointer-events-none' : (isPanning || isSpacePressed ? 'cursor-grab active:cursor-grabbing' : isReadOnly ? 'cursor-not-allowed' : 'cursor-crosshair')}`}
+            onMouseDown={(e) => !isReadOnly && !isPanning && !isSpacePressed && tool !== 'select' && startDrawing(e)}
+            onMouseMove={(e) => !isReadOnly && !isPanning && !isSpacePressed && tool !== 'select' && draw(e)}
+            onMouseUp={(e) => !isReadOnly && stopDrawing()}
+            onMouseLeave={(e) => !isReadOnly && stopDrawing()}
+            onTouchStart={(e) => !isReadOnly && tool !== 'select' && startDrawing(e)}
+            onTouchMove={(e) => !isReadOnly && tool !== 'select' && draw(e)}
+            onTouchEnd={(e) => !isReadOnly && stopDrawing()}
+          />
         </motion.div>
 
       </div>

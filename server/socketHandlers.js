@@ -136,6 +136,17 @@ export const setupSocketHandlers = (io) => {
                         role: userId && userId.toString() === room.owner.toString() ? 'owner' : role || 'guest',
                     });
 
+                    // Load Data from Meeting (Canvas State)
+                    const meeting = await Meeting.findById(meetingId);
+                    if (meeting && meeting.canvasData) {
+                        // Send existing canvas state to the user who joined
+                        // We send this only to the new user so they get the current board state
+                        socket.emit('canvas-state', {
+                            strokes: meeting.canvasData.strokes || [],
+                            // Add other types as we implement persistence for them
+                        });
+                    }
+
                     // Notify others in the room
                     socket.to(roomId).emit('user-joined', {
                         socketId: socket.id,
@@ -168,8 +179,37 @@ export const setupSocketHandlers = (io) => {
         });
 
         // Handle drawing events
-        socket.on('draw-stroke', (data) => {
+        socket.on('draw-stroke', async (data) => {
+            // Broadcast to others
             socket.to(socket.roomId).emit('draw-stroke', data);
+
+            // Save to Database
+            if (data.meetingId) {
+                try {
+                    const meeting = await Meeting.findById(data.meetingId);
+                    if (meeting) {
+                        // Initialize strokes array if it doesn't exist
+                        if (!meeting.canvasData) meeting.canvasData = {};
+                        if (!meeting.canvasData.strokes) meeting.canvasData.strokes = [];
+
+                        // Add the new stroke
+                        // We need to ensure we're modifying the Mixed type correctly for Mongoose to detect changes
+                        const currentStrokes = meeting.canvasData.strokes || [];
+                        currentStrokes.push(data.stroke);
+
+                        // Mongoose Mixed type update requirement
+                        meeting.canvasData = {
+                            ...meeting.canvasData,
+                            strokes: currentStrokes
+                        };
+                        meeting.markModified('canvasData');
+
+                        await meeting.save();
+                    }
+                } catch (error) {
+                    console.error('Error saving stroke:', error);
+                }
+            }
         });
 
         socket.on('draw-point', (data) => {
