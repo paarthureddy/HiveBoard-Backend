@@ -15,12 +15,16 @@ let socket: Socket | null = null;
 
 export const getSocket = (): Socket => {
     if (!socket) {
+        console.log('🔌 Connecting to Socket.IO server:', SOCKET_URL);
         socket = io(SOCKET_URL, {
             autoConnect: false,
             reconnection: true,
             reconnectionDelay: 1000,
             reconnectionDelayMax: 5000,
             reconnectionAttempts: 5,
+            transports: ['websocket', 'polling'], // Try WebSocket first, fallback to polling
+            path: '/socket.io/', // Explicit path for socket.io endpoint
+            withCredentials: true, // Include credentials for CORS
         });
 
         // Connection event listeners
