@@ -17,6 +17,7 @@ import UserPresence from "@/components/canvas/UserPresence";
 import ParticipantsList from "@/components/ParticipantsList";
 import ShareModal from "@/components/ShareModal";
 import LoginPromptModal from "@/components/LoginPromptModal";
+import ConfirmationModal from "@/components/ConfirmationModal";
 import { User, ChatMessage, PRESENCE_COLORS, StickyNote, TextItem, CroquisItem, Stroke } from "@/types/canvas";
 import type { Participant } from "@/types/room";
 import logo from "@/assets/hive-logo.jpg";
@@ -841,13 +842,27 @@ const Canvas = () => {
     if (isReadOnly) return;
     draw(e);
   };
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const handleClearCanvas = () => {
     if (!handleEditAttempt()) return;
+    setShowResetConfirm(true);
+  };
+
+  const confirmClearCanvas = () => {
     clearCanvas();
     setStickyNotes([]);
     setTextItems([]);
     setCroquisItems([]);
+    // Ensure socket emit happens here if clearCanvas doesn't
+    // Note: useCanvas passes onClear prop which emits sendClearCanvas
+    // Wait, useCanvas hook calls onClear when clearCanvas() is called? 
+    // Let's check useCanvas.
+    // Assuming clearCanvas() from hook triggers onClear callback which emits socket.
+    // If NOT, we need to emit here manually. 
+    // Looking at line 145/173: "onClear: () => { sendClearCanvas(...) }" 
+    // So calling clearCanvas() is enough.
   };
+
   const handleUndo = () => {
     if (!handleEditAttempt()) return;
     undo();
@@ -1460,6 +1475,15 @@ const Canvas = () => {
 
 
       <LoginPromptModal isOpen={showLoginPrompt} onClose={() => setShowLoginPrompt(false)} onSuccess={() => { setShowLoginPrompt(false); window.location.reload(); }} />
+      <ConfirmationModal
+        isOpen={showResetConfirm}
+        onClose={() => setShowResetConfirm(false)}
+        onConfirm={confirmClearCanvas}
+        title="Reset Canvas?"
+        message="Are you sure you want to reset the canvas? You can't undo it, and all strokes will be permanently deleted from the database."
+        confirmText="Confirm Reset"
+        cancelText="Cancel"
+      />
       {meetingId && <ShareModal isOpen={showShareModal} onClose={() => setShowShareModal(false)} meetingId={meetingId} meetingTitle={sessionName} />}
     </div >
   );

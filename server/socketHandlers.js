@@ -216,8 +216,31 @@ export const setupSocketHandlers = (io) => {
             socket.to(socket.roomId).emit('draw-point', data);
         });
 
-        socket.on('clear-canvas', (data) => {
+        socket.on('clear-canvas', async (data) => {
+            // Broadcast to others
             socket.to(socket.roomId).emit('clear-canvas', data);
+
+            // Delete from Database
+            if (data.meetingId) {
+                try {
+                    const meeting = await Meeting.findById(data.meetingId);
+                    if (meeting) {
+                        // Reset canvas data
+                        meeting.canvasData = {
+                            strokes: [],
+                            // If we want to clear everything:
+                            // stickyNotes: [], 
+                            // textItems: [],
+                            // croquis: []
+                        };
+                        meeting.markModified('canvasData');
+                        await meeting.save();
+                        console.log(`🧹 Canvas cleared for meeting ${data.meetingId}`);
+                    }
+                } catch (error) {
+                    console.error('Error clearing canvas in DB:', error);
+                }
+            }
         });
 
         socket.on('undo-stroke', (data) => {
