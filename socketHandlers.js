@@ -1,10 +1,12 @@
 import Room from './models/Room.js';
 import Meeting from './models/Meeting.js';
 import Message from './models/Message.js';
+import ActivityService from './services/ActivityService.js';
 
 /**
- * Configure all Socket.io event listners for real-time functionality.
- * This handles room management, live drawing, chat, and participants.
+ * Configure all Socket.io event listeners for real-time functionality.
+ * This handles room management, live drawing, chat, participants,
+ * and session activity tracking.
  */
 export const setupSocketHandlers = (io) => {
     // Listen for new client connections
@@ -18,6 +20,7 @@ export const setupSocketHandlers = (io) => {
          * - Adds the user to the participant list
          * - Emits current chat history and participant list to the user
          * - Notifies other users in the room
+         * - Starts a SessionActivity record for analytics
          */
         socket.on('join-room', async (data) => {
             try {
@@ -27,6 +30,12 @@ export const setupSocketHandlers = (io) => {
                 if (socket.roomId && socket.roomId !== roomId) {
                     console.log(`🔌 Socket ${socket.id} switching from room ${socket.roomId} to ${roomId}`);
                     socket.leave(socket.roomId);
+
+                    // Close the previous session (if any)
+                    if (socket.activitySessionId) {
+                        await ActivityService.endSession(socket.activitySessionId);
+                        socket.activitySessionId = null;
+                    }
 
                     // Remove from previous room's active connections in DB
                     try {
@@ -106,8 +115,25 @@ export const setupSocketHandlers = (io) => {
 
                     // Store room info in socket
                     socket.roomId = roomId;
+                    socket.meetingId = meetingId;
                     socket.userId = userId;
                     socket.guestId = guestId;
+
+                    // ── Activity Tracking: Start session ──────────────────────────
+                    const effectiveRole = userId && userId.toString() === room.owner.toString()
+                        ? 'owner'
+                        : role || 'guest';
+
+                    const activitySession = await ActivityService.startSession({
+                        meetingId,
+                        userId,
+                        guestId,
+                        participantName: name || 'Anonymous',
+                        role: effectiveRole,
+                        socketId: socket.id,
+                    });
+                    socket.activitySessionId = activitySession?._id ?? null;
+                    // ─────────────────────────────────────────────────────────────
 
                     // Get chat history
                     const messages = await Message.find({ roomId })
@@ -140,7 +166,6 @@ export const setupSocketHandlers = (io) => {
                     const meeting = await Meeting.findById(meetingId);
                     if (meeting && meeting.canvasData) {
                         // Send existing canvas state to the user who joined
-                        // We send this only to the new user so they get the current board state
                         socket.emit('canvas-state', {
                             strokes: meeting.canvasData.strokes || [],
                             stickyNotes: meeting.canvasData.stickyNotes || [],
@@ -176,7 +201,7 @@ export const setupSocketHandlers = (io) => {
                 guestId: socket.guestId,
                 socketId: socket.id,
                 position: data.position,
-                color: socket.color // You might want to store color in socket on join or update
+                color: socket.color,
             });
         });
 
@@ -185,21 +210,29 @@ export const setupSocketHandlers = (io) => {
             // Broadcast to others
             socket.to(socket.roomId).emit('draw-stroke', data);
 
+            // ── Activity Tracking ─────────────────────────────────────────────
+            if (socket.activitySessionId) {
+                await ActivityService.logEvent(socket.activitySessionId, {
+                    meetingId: data.meetingId || socket.meetingId,
+                    userId: socket.userId,
+                    guestId: socket.guestId,
+                    eventType: 'draw-stroke',
+                    meta: { color: data.stroke?.color, tool: data.stroke?.tool },
+                });
+            }
+            // ─────────────────────────────────────────────────────────────────
+
             // Save to Database
             if (data.meetingId) {
                 try {
                     const meeting = await Meeting.findById(data.meetingId);
                     if (meeting) {
-                        // Initialize strokes array if it doesn't exist
                         if (!meeting.canvasData) meeting.canvasData = {};
                         if (!meeting.canvasData.strokes) meeting.canvasData.strokes = [];
 
-                        // Add the new stroke
-                        // We need to ensure we're modifying the Mixed type correctly for Mongoose to detect changes
                         const currentStrokes = meeting.canvasData.strokes || [];
                         currentStrokes.push(data.stroke);
 
-                        // Mongoose Mixed type update requirement
                         meeting.canvasData = {
                             ...meeting.canvasData,
                             strokes: currentStrokes
@@ -222,19 +255,23 @@ export const setupSocketHandlers = (io) => {
             // Broadcast to others
             socket.to(socket.roomId).emit('clear-canvas', data);
 
+            // ── Activity Tracking ─────────────────────────────────────────────
+            if (socket.activitySessionId) {
+                await ActivityService.logEvent(socket.activitySessionId, {
+                    meetingId: data.meetingId || socket.meetingId,
+                    userId: socket.userId,
+                    guestId: socket.guestId,
+                    eventType: 'clear-canvas',
+                });
+            }
+            // ─────────────────────────────────────────────────────────────────
+
             // Delete from Database
             if (data.meetingId) {
                 try {
                     const meeting = await Meeting.findById(data.meetingId);
                     if (meeting) {
-                        // Reset canvas data
-                        meeting.canvasData = {
-                            strokes: [],
-                            // If we want to clear everything:
-                            // stickyNotes: [], 
-                            // textItems: [],
-                            // croquis: []
-                        };
+                        meeting.canvasData = { strokes: [] };
                         meeting.markModified('canvasData');
                         await meeting.save();
                         console.log(`🧹 Canvas cleared for meeting ${data.meetingId}`);
@@ -245,13 +282,37 @@ export const setupSocketHandlers = (io) => {
             }
         });
 
-        socket.on('undo-stroke', (data) => {
+        socket.on('undo-stroke', async (data) => {
             socket.to(socket.roomId).emit('undo-stroke', data);
+
+            // ── Activity Tracking ─────────────────────────────────────────────
+            if (socket.activitySessionId) {
+                await ActivityService.logEvent(socket.activitySessionId, {
+                    meetingId: data.meetingId || socket.meetingId,
+                    userId: socket.userId,
+                    guestId: socket.guestId,
+                    eventType: 'undo-stroke',
+                });
+            }
+            // ─────────────────────────────────────────────────────────────────
         });
 
-        // Croquis Events
+        // ── Croquis Events ────────────────────────────────────────────────────
+
         socket.on('add-croquis', async (data) => {
             socket.to(socket.roomId).emit('add-croquis', data);
+
+            // ── Activity Tracking ─────────────────────────────────────────────
+            if (socket.activitySessionId) {
+                await ActivityService.logEvent(socket.activitySessionId, {
+                    meetingId: data.meetingId || socket.meetingId,
+                    userId: socket.userId,
+                    guestId: socket.guestId,
+                    eventType: 'add-croquis',
+                });
+            }
+            // ─────────────────────────────────────────────────────────────────
+
             if (data.meetingId) {
                 const meeting = await Meeting.findById(data.meetingId);
                 if (meeting) {
@@ -265,6 +326,18 @@ export const setupSocketHandlers = (io) => {
 
         socket.on('update-croquis', async (data) => {
             socket.to(socket.roomId).emit('update-croquis', data);
+
+            // ── Activity Tracking ─────────────────────────────────────────────
+            if (socket.activitySessionId) {
+                await ActivityService.logEvent(socket.activitySessionId, {
+                    meetingId: data.meetingId || socket.meetingId,
+                    userId: socket.userId,
+                    guestId: socket.guestId,
+                    eventType: 'update-croquis',
+                });
+            }
+            // ─────────────────────────────────────────────────────────────────
+
             if (data.meetingId) {
                 const meeting = await Meeting.findById(data.meetingId);
                 if (meeting) {
@@ -279,6 +352,18 @@ export const setupSocketHandlers = (io) => {
 
         socket.on('delete-croquis', async (data) => {
             socket.to(socket.roomId).emit('delete-croquis', data);
+
+            // ── Activity Tracking ─────────────────────────────────────────────
+            if (socket.activitySessionId) {
+                await ActivityService.logEvent(socket.activitySessionId, {
+                    meetingId: data.meetingId || socket.meetingId,
+                    userId: socket.userId,
+                    guestId: socket.guestId,
+                    eventType: 'delete-croquis',
+                });
+            }
+            // ─────────────────────────────────────────────────────────────────
+
             if (data.meetingId) {
                 const meeting = await Meeting.findById(data.meetingId);
                 if (meeting) {
@@ -291,7 +376,8 @@ export const setupSocketHandlers = (io) => {
             }
         });
 
-        // Chat Messages
+        // ── Chat Messages ─────────────────────────────────────────────────────
+
         socket.on('send-message', async (data) => {
             try {
                 console.log('📨 Received send-message event:', {
@@ -321,6 +407,18 @@ export const setupSocketHandlers = (io) => {
                     io.to(socket.roomId).emit('receive-message', newMessage);
 
                     console.log('✅ Message broadcast complete');
+
+                    // ── Activity Tracking ─────────────────────────────────────
+                    if (socket.activitySessionId) {
+                        await ActivityService.logEvent(socket.activitySessionId, {
+                            meetingId: meetingId || socket.meetingId,
+                            userId: userId || socket.userId,
+                            guestId: guestId || socket.guestId,
+                            eventType: 'send-message',
+                            meta: { contentLength: content?.length },
+                        });
+                    }
+                    // ─────────────────────────────────────────────────────────
                 } else {
                     console.error('❌ No roomId found for socket:', socket.id);
                 }
@@ -329,9 +427,22 @@ export const setupSocketHandlers = (io) => {
             }
         });
 
-        // Sticky Notes
+        // ── Sticky Notes ──────────────────────────────────────────────────────
+
         socket.on('add-sticky', async (data) => {
             socket.to(socket.roomId).emit('add-sticky', data);
+
+            // ── Activity Tracking ─────────────────────────────────────────────
+            if (socket.activitySessionId) {
+                await ActivityService.logEvent(socket.activitySessionId, {
+                    meetingId: data.meetingId || socket.meetingId,
+                    userId: socket.userId,
+                    guestId: socket.guestId,
+                    eventType: 'add-sticky',
+                });
+            }
+            // ─────────────────────────────────────────────────────────────────
+
             if (data.meetingId) {
                 const meeting = await Meeting.findById(data.meetingId);
                 if (meeting) {
@@ -345,6 +456,18 @@ export const setupSocketHandlers = (io) => {
 
         socket.on('update-sticky', async (data) => {
             socket.to(socket.roomId).emit('update-sticky', data);
+
+            // ── Activity Tracking ─────────────────────────────────────────────
+            if (socket.activitySessionId) {
+                await ActivityService.logEvent(socket.activitySessionId, {
+                    meetingId: data.meetingId || socket.meetingId,
+                    userId: socket.userId,
+                    guestId: socket.guestId,
+                    eventType: 'update-sticky',
+                });
+            }
+            // ─────────────────────────────────────────────────────────────────
+
             if (data.meetingId) {
                 const meeting = await Meeting.findById(data.meetingId);
                 if (meeting) {
@@ -359,6 +482,18 @@ export const setupSocketHandlers = (io) => {
 
         socket.on('delete-sticky', async (data) => {
             socket.to(socket.roomId).emit('delete-sticky', data);
+
+            // ── Activity Tracking ─────────────────────────────────────────────
+            if (socket.activitySessionId) {
+                await ActivityService.logEvent(socket.activitySessionId, {
+                    meetingId: data.meetingId || socket.meetingId,
+                    userId: socket.userId,
+                    guestId: socket.guestId,
+                    eventType: 'delete-sticky',
+                });
+            }
+            // ─────────────────────────────────────────────────────────────────
+
             if (data.meetingId) {
                 const meeting = await Meeting.findById(data.meetingId);
                 if (meeting) {
@@ -371,9 +506,22 @@ export const setupSocketHandlers = (io) => {
             }
         });
 
-        // Text Items
+        // ── Text Items ────────────────────────────────────────────────────────
+
         socket.on('add-text', async (data) => {
             socket.to(socket.roomId).emit('add-text', data);
+
+            // ── Activity Tracking ─────────────────────────────────────────────
+            if (socket.activitySessionId) {
+                await ActivityService.logEvent(socket.activitySessionId, {
+                    meetingId: data.meetingId || socket.meetingId,
+                    userId: socket.userId,
+                    guestId: socket.guestId,
+                    eventType: 'add-text',
+                });
+            }
+            // ─────────────────────────────────────────────────────────────────
+
             if (data.meetingId) {
                 const meeting = await Meeting.findById(data.meetingId);
                 if (meeting) {
@@ -387,6 +535,18 @@ export const setupSocketHandlers = (io) => {
 
         socket.on('update-text', async (data) => {
             socket.to(socket.roomId).emit('update-text', data);
+
+            // ── Activity Tracking ─────────────────────────────────────────────
+            if (socket.activitySessionId) {
+                await ActivityService.logEvent(socket.activitySessionId, {
+                    meetingId: data.meetingId || socket.meetingId,
+                    userId: socket.userId,
+                    guestId: socket.guestId,
+                    eventType: 'update-text',
+                });
+            }
+            // ─────────────────────────────────────────────────────────────────
+
             if (data.meetingId) {
                 const meeting = await Meeting.findById(data.meetingId);
                 if (meeting) {
@@ -401,6 +561,18 @@ export const setupSocketHandlers = (io) => {
 
         socket.on('delete-text', async (data) => {
             socket.to(socket.roomId).emit('delete-text', data);
+
+            // ── Activity Tracking ─────────────────────────────────────────────
+            if (socket.activitySessionId) {
+                await ActivityService.logEvent(socket.activitySessionId, {
+                    meetingId: data.meetingId || socket.meetingId,
+                    userId: socket.userId,
+                    guestId: socket.guestId,
+                    eventType: 'delete-text',
+                });
+            }
+            // ─────────────────────────────────────────────────────────────────
+
             if (data.meetingId) {
                 const meeting = await Meeting.findById(data.meetingId);
                 if (meeting) {
@@ -413,11 +585,18 @@ export const setupSocketHandlers = (io) => {
             }
         });
 
+        // ── Disconnect / Leave ────────────────────────────────────────────────
 
-        // Disconnect
         socket.on('disconnect', async () => {
             console.log(` Client disconnected: ${socket.id}`);
             try {
+                // ── Activity Tracking: Close session ──────────────────────────
+                if (socket.activitySessionId) {
+                    await ActivityService.endSession(socket.activitySessionId);
+                    socket.activitySessionId = null;
+                }
+                // ─────────────────────────────────────────────────────────────
+
                 if (socket.roomId) {
                     const room = await Room.findOne({ roomId: socket.roomId });
                     if (room) {
@@ -447,26 +626,14 @@ export const setupSocketHandlers = (io) => {
             }
         });
 
-        // Get participants
+        // ── Get Participants ──────────────────────────────────────────────────
+
         socket.on('get-participants', async () => {
             try {
                 if (socket.roomId) {
                     const room = await Room.findOne({ roomId: socket.roomId });
 
                     if (room) {
-                        // Clean up stale connections here too
-                        /* if (io.sockets && io.sockets.sockets) {
-                            const connectedSocketIds = io.sockets.sockets;
-                            let changed = false;
-                            const initialLen = room.activeConnections.length;
-                            room.activeConnections = room.activeConnections.filter(conn =>
-                                connectedSocketIds.has(conn.socketId)
-                            );
-                            if (room.activeConnections.length !== initialLen) {
-                                await room.save();
-                            }
-                        } */
-
                         const participants = room.activeConnections.map(conn => ({
                             socketId: conn.socketId,
                             userId: conn.userId,

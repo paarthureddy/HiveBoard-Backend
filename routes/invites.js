@@ -1,8 +1,9 @@
-    import express from 'express';
+import express from 'express';
 import crypto from 'crypto';
 import Meeting from '../models/Meeting.js';
 import Room from '../models/Room.js';
 import protect from '../middleware/auth.js';
+import ActivityService from '../services/ActivityService.js';
 
 const router = express.Router();
 
@@ -132,6 +133,15 @@ router.post('/:token/join', async (req, res) => {
 
         // Generate guest ID if not authenticated
         const guestId = crypto.randomBytes(16).toString('hex');
+
+        // ── Activity Tracking: log invite-used ──────────────────────────────
+        ActivityService.logInviteUsed({
+            meetingId: meeting._id,
+            guestId,
+            inviteToken: token,
+            participantName: guestName || 'Guest',
+        }).catch(() => { }); // non-blocking, errors silenced
+        // ────────────────────────────────────────────────────────────────────
 
         res.json({
             meetingId: meeting._id,
