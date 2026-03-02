@@ -403,8 +403,12 @@ export const setupSocketHandlers = (io) => {
                     console.log('💾 Message saved to DB:', newMessage._id);
                     console.log('📡 Broadcasting to room:', socket.roomId);
 
-                    // Broadcast to everyone in room including sender (to confirm save)
-                    io.to(socket.roomId).emit('receive-message', newMessage);
+                    // Broadcast to everyone ELSE in the room (not the sender)
+                    socket.to(socket.roomId).emit('receive-message', newMessage);
+
+                    // Confirm save back to the sender with a flag so the frontend
+                    // can replace the optimistic message instead of adding a duplicate
+                    socket.emit('message-confirmed', newMessage);
 
                     console.log('✅ Message broadcast complete');
 
