@@ -118,6 +118,7 @@ export const setupSocketHandlers = (io) => {
                     socket.meetingId = meetingId;
                     socket.userId = userId;
                     socket.guestId = guestId;
+                    socket.userName = name;
 
                     // ── Activity Tracking: Start session ──────────────────────────
                     const effectiveRole = userId && userId.toString() === room.owner.toString()
@@ -182,6 +183,10 @@ export const setupSocketHandlers = (io) => {
                         name,
                         participants,
                     });
+
+                    // Log view/join
+                    await logActivity(socket, 'join');
+                    await logActivity(socket, 'view');
                 }
             } catch (error) {
                 console.error('Error joining room:', error);
@@ -207,7 +212,12 @@ export const setupSocketHandlers = (io) => {
 
         // Handle drawing events
         socket.on('draw-stroke', async (data) => {
+            if (!socket.roomId) {
+                console.warn(`⚠️ Socket ${socket.id} tried to draw without a room!`);
+                return;
+            }
             // Broadcast to others
+            console.log(`🖌️ draw-stroke in room ${socket.roomId} from ${socket.id}`);
             socket.to(socket.roomId).emit('draw-stroke', data);
 
             // ── Activity Tracking ─────────────────────────────────────────────
@@ -247,6 +257,30 @@ export const setupSocketHandlers = (io) => {
             }
         });
 
+        socket.on('update-stroke', async (data) => {
+            console.log(`🖌️ update-stroke in room ${socket.roomId}`);
+            socket.to(socket.roomId).emit('update-stroke', data);
+
+            if (data.meetingId) {
+                try {
+                    const meeting = await Meeting.findById(data.meetingId);
+                    if (meeting && meeting.canvasData && meeting.canvasData.strokes) {
+                        const currentStrokes = meeting.canvasData.strokes;
+                        const updatedStrokes = currentStrokes.map(s => s.id === data.id ? { ...s, ...data.updates } : s);
+
+                        meeting.canvasData = {
+                            ...meeting.canvasData,
+                            strokes: updatedStrokes
+                        };
+                        meeting.markModified('canvasData');
+                        await meeting.save();
+                    }
+                } catch (err) {
+                    console.error('Error updating stroke:', err);
+                }
+            }
+        });
+
         socket.on('draw-point', (data) => {
             socket.to(socket.roomId).emit('draw-point', data);
         });
@@ -254,6 +288,7 @@ export const setupSocketHandlers = (io) => {
         socket.on('clear-canvas', async (data) => {
             // Broadcast to others
             socket.to(socket.roomId).emit('clear-canvas', data);
+            await logActivity(socket, 'clear', { type: 'clear-canvas' });
 
             // ── Activity Tracking ─────────────────────────────────────────────
             if (socket.activitySessionId) {
@@ -619,6 +654,7 @@ export const setupSocketHandlers = (io) => {
 
                         socket.leave(socket.roomId);
                         console.log(`👋 User left room ${socket.roomId}`);
+                        await logActivity(socket, 'leave');
                     }
                 }
             } catch (error) {
