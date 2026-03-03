@@ -1,7 +1,6 @@
 import express from 'express';
 import ActivityLog from '../models/ActivityLog.js';
 import Room from '../models/Room.js';
-import { auth, guestAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
