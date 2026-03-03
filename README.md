@@ -1,87 +1,154 @@
-# HiveBoard - Real-time Collaborative Whiteboard
+# 🐝 HiveBoard Backend
 
-HiveBoard is a full-stack web application designed for real-time collaboration. It provides a shared canvas where users can draw, add sticky notes, and work together seamlessly.
+Backend API for HiveBoard – collaborative whiteboard and meeting platform.
 
-## Project Structure (Monorepo)
+Hosted on Render.
 
-This project is structured as a **Monorepo** (Monolithic Repository), containing both the frontend and backend codebases in a single repository.
+---
 
-### Why Monorepo?
+# 🚀 Tech Stack
 
-We chose a monorepo structure for the following reasons, which are beneficial for development and maintenance:
+- Node.js
+- Express.js
+- MongoDB (Mongoose)
+- Passport.js (Google OAuth)
+- JWT Authentication
+- Docker Support
 
-1.  **Unified Development Workflow**: Having both frontend and backend in one place simplifies the development process. Developers can run both servers, debug issues across the stack, and make full-stack changes in a single workflow.
-2.  **Atomic Commits**: Features often require changes in both the API (backend) and the UI (frontend). A monorepo allows us to commit these related changes together, ensuring that the codebase remains in a consistent state at every commit.
-3.  **Simplified Dependency Management**: Managing dependencies and scripts is centralized. We can easily orchestrate build and start commands for the entire application from the root.
-4.  **Code Sharing & Consistency**: While currently separate, a monorepo structure facilitates future sharing of types, interfaces, and utility functions between frontend and backend (e.g., using TypeScript interfaces for API responses).
-5.  **Easier Deployment Coordination**: Deploying full-stack features is streamlined as the source of truth is a single repository version.
+---
 
-## Architecture
+# 📁 Project Structure
 
-*   **Frontend**: React (Vite) + TypeScript + Tailwind CSS
-    *   Hosted on [Vercel](https://vercel.com)
-    *   Provides the user interface for the whiteboard, dashboard, and authentication.
-*   **Backend**: Node.js + Express + Socket.io + MongoDB
-    *   Hosted on [Render](https://render.com)
-    *   Handles API requests, real-time WebSocket communication, and data persistence.
+```
+HiveBoard-Backend/
+├── controllers/
+├── routes/
+├── models/
+├── middleware/
+├── config/
+├── utils/
+├── server.js / index.js
+├── package.json
+└── docker-compose.yml
+```
 
-## Tech Stack
+---
 
-*   **Frontend**:
-    *   React 18
-    *   TypeScript
-    *   Vite
-    *   Tailwind CSS & Shadcn/ui
-    *   Framer Motion
-    *   Socket.io Client
-    *   Axios
-*   **Backend**:
-    *   Node.js
-    *   Express
-    *   Socket.io
-    *   Mongoose (MongoDB)
-    *   Passport.js (Google OAuth)
-    *   JsonWebToken (JWT)
+# 🔧 Environment Variables
 
-## Deployment Guide
+Create a `server/.env` or `.env` file in the root:
 
-### Backend (Render)
+```
+MONGODB_URI=your_mongodb_connection_string
+JWT_SECRET=your_super_secret_key
+GOOGLE_CLIENT_ID=767957186138-4t7th40ckqjplcs5gabf7gre42r7vhf3.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+GOOGLE_CALLBACK_URL=http://localhost:5000/api/auth/google/callback
+FRONTEND_URL=http://localhost:5173
+PORT=5000
+```
 
-1.  **Root Directory**: `server`
-2.  **Build Command**: `npm install`
-3.  **Start Command**: `npm run start` (or `node index.js`)
-4.  **Environment Variables**:
-    *   `MONGODB_URI`: Connection string for MongoDB Atlas.
-    *   `JWT_SECRET`: Secret key for signing JWTs.
-    *   `GOOGLE_CLIENT_ID`: Google OAuth Client ID.
-    *   `GOOGLE_CLIENT_SECRET`: Google OAuth Client Secret.
-    *   `GOOGLE_CALLBACK_URL`: Production URL for OAuth callback (e.g., `https://your-backend.onrender.com/api/auth/google/callback`).
-    *   `FRONTEND_URL`: URL of the deployed frontend (e.g., `https://hiveboard.vercel.app`).
+### Variable Explanation
 
-### Frontend (Vercel)
+- `MONGODB_URI` → MongoDB Atlas connection string
+- `JWT_SECRET` → Secret for signing JWT tokens
+- `GOOGLE_CLIENT_ID` → Same client ID used in frontend
+- `GOOGLE_CLIENT_SECRET` → Google OAuth secret
+- `GOOGLE_CALLBACK_URL` → OAuth redirect URL
+- `FRONTEND_URL` → Allowed frontend origin
+- `PORT` → Backend server port
 
-1.  **Framework Preset**: Vite
-2.  **Build Command**: `npm run build`
-3.  **Output Directory**: `dist`
-4.  **Environment Variables**:
-    *   `VITE_API_URL`: URL of the deployed backend (e.g., `https://your-backend.onrender.com/api`).
-    *   `VITE_GOOGLE_CLIENT_ID`: Google OAuth Client ID.
+---
 
-## Local Development
+# 🔗 API Base URL
 
-1.  **Clone the repository**:
-    ```bash
-    git clone https://github.com/paarthureddy/HiveBoard.git
-    cd HiveBoard
-    ```
+Local:
+```
+http://localhost:5000/api
+```
 
-2.  **Install dependencies**:
-    *   Frontend: `npm install`
-    *   Backend: `cd server && npm install`
+Production:
+```
+https://your-backend.onrender.com/api
+```
 
-3.  **Setup Environment Variables**:
-    *   Create `.env` in root (frontend) and `server/.env` (backend) with keys from `.env.example` (if available) or the guide above.
+---
 
-4.  **Run the application**:
-    *   Frontend: `npm run dev`
-    *   Backend: `cd server && npm run dev`
+# 📡 API Endpoints
+
+## 🔐 Authentication
+- POST `/auth/login`
+- POST `/auth/register`
+- POST `/auth/google/verify`
+- GET `/auth/me`
+
+## 📅 Meetings
+- GET `/meetings`
+- GET `/meetings/:id`
+- GET `/meetings/public/:id`
+- POST `/meetings`
+- PUT `/meetings/:id`
+- DELETE `/meetings/:id`
+
+## 📩 Invites
+- POST `/invites/generate`
+- GET `/invites/:token`
+- POST `/invites/:token/join`
+- PUT `/invites/:meetingId/toggle`
+
+## 👤 Users
+- GET `/users/report`
+
+---
+
+# 💻 Local Setup
+
+### 1️⃣ Clone Repository
+
+```bash
+git clone https://github.com/paarthureddy/HiveBoard-Backend.git
+cd HiveBoard-Backend
+```
+
+### 2️⃣ Install Dependencies
+
+```bash
+npm install
+```
+
+### 3️⃣ Run Server
+
+```bash
+npm run dev
+```
+
+Server runs on:
+
+```
+http://localhost:5000
+```
+
+---
+
+# 🚀 Deployment
+
+Hosted on **Render**.
+
+Steps:
+1. Connect GitHub repository
+2. Add environment variables
+3. Deploy
+
+---
+
+# 🔗 Frontend Repository
+
+Frontend code:
+
+👉 https://github.com/paarthureddy/-HiveBoard-Frontend
+
+---
+
+# 📄 License
+
+Educational Project

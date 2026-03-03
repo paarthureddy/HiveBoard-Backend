@@ -1,8 +1,9 @@
-    import express from 'express';
+import express from 'express';
 import crypto from 'crypto';
 import Meeting from '../models/Meeting.js';
 import Room from '../models/Room.js';
 import protect from '../middleware/auth.js';
+import ActivityService from '../services/ActivityService.js';
 
 const router = express.Router();
 
@@ -119,6 +120,11 @@ router.post('/:token/join', async (req, res) => {
             return res.status(403).json({ message: 'This invite link has been disabled' });
         }
 
+        // Block unauthenticated guests when external sharing is disabled
+        if (!meeting.allowGuests) {
+            return res.status(403).json({ message: 'External sharing has been disabled for this session. Only registered users can join.' });
+        }
+
         // Find or create room
         let room = await Room.findOne({ meetingId: meeting._id });
 
@@ -132,6 +138,15 @@ router.post('/:token/join', async (req, res) => {
 
         // Generate guest ID if not authenticated
         const guestId = crypto.randomBytes(16).toString('hex');
+
+        // ── Activity Tracking: log invite-used ──────────────────────────────
+        ActivityService.logInviteUsed({
+            meetingId: meeting._id,
+            guestId,
+            inviteToken: token,
+            participantName: guestName || 'Guest',
+        }).catch(() => { }); // non-blocking, errors silenced
+        // ────────────────────────────────────────────────────────────────────
 
         res.json({
             meetingId: meeting._id,
@@ -172,6 +187,125 @@ router.put('/:meetingId/toggle', protect, async (req, res) => {
     } catch (error) {
         console.error('Toggle invite error:', error);
         res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// @route   DELETE /api/invites/:meetingId/revoke
+// @desc    Revoke (permanently delete) the shared invite link
+// @access  Private (owner only)
+router.delete('/:meetingId/revoke', protect, async (req, res) => {
+    try {
+        const { meetingId } = req.params;
+
+        const meeting = await Meeting.findById(meetingId);
+
+        if (!meeting) {
+            return res.status(404).json({ message: 'Meeting not found' });
+        }
+
+        // Only the owner can revoke
+        if (meeting.createdBy.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: 'Not authorized to revoke this invite link' });
+        }
+
+        // Clear the token and disable the invite
+        meeting.inviteToken = undefined;
+        meeting.inviteEnabled = false;
+        await meeting.save();
+
+        // Also clear token from the associated room
+        await Room.findOneAndUpdate(
+            { meetingId: meeting._id },
+            { inviteToken: null, inviteEnabled: false }
+        );
+
+        res.json({ message: 'Invite link revoked successfully', inviteEnabled: false });
+    } catch (error) {
+        console.error('Revoke invite error:', error);
+        res.status(500).json({ message: 'Server error revoking invite link' });
+    }
+});
+
+// @route   POST /api/invites/:meetingId/regenerate
+// @desc    Regenerate a new invite link (invalidates the old one)
+// @access  Private (owner only)
+router.post('/:meetingId/regenerate', protect, async (req, res) => {
+    try {
+        const { meetingId } = req.params;
+
+        const meeting = await Meeting.findById(meetingId);
+
+        if (!meeting) {
+            return res.status(404).json({ message: 'Meeting not found' });
+        }
+
+        // Only the owner can regenerate
+        if (meeting.createdBy.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: 'Not authorized to regenerate this invite link' });
+        }
+
+        // Issue a fresh token — old link is immediately invalidated
+        const newToken = crypto.randomBytes(32).toString('hex');
+        meeting.inviteToken = newToken;
+        meeting.inviteEnabled = true;
+        await meeting.save();
+
+        // Sync new token to the room
+        await Room.findOneAndUpdate(
+            { meetingId: meeting._id },
+            { inviteToken: newToken, inviteEnabled: true }
+        );
+
+        res.json({
+            message: 'Invite link regenerated successfully',
+            inviteToken: newToken,
+            inviteUrl: `${process.env.CLIENT_URL || 'http://localhost:8080'}/join/${newToken}`,
+        });
+    } catch (error) {
+        console.error('Regenerate invite error:', error);
+        res.status(500).json({ message: 'Server error regenerating invite link' });
+    }
+});
+
+// @route   PUT /api/invites/:meetingId/external-sharing
+// @desc    Enable or disable external (guest) sharing for a session
+// @access  Private (owner only)
+router.put('/:meetingId/external-sharing', protect, async (req, res) => {
+    try {
+        const { meetingId } = req.params;
+        const { allowGuests } = req.body;
+
+        if (typeof allowGuests !== 'boolean') {
+            return res.status(400).json({ message: '"allowGuests" must be a boolean value' });
+        }
+
+        const meeting = await Meeting.findById(meetingId);
+
+        if (!meeting) {
+            return res.status(404).json({ message: 'Meeting not found' });
+        }
+
+        // Only the owner can change this setting
+        if (meeting.createdBy.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: 'Not authorized to change sharing settings for this meeting' });
+        }
+
+        meeting.allowGuests = allowGuests;
+        await meeting.save();
+
+        // Keep the Room in sync
+        await Room.findOneAndUpdate(
+            { meetingId: meeting._id },
+            { allowGuests }
+        );
+
+        res.json({
+            message: `External sharing ${allowGuests ? 'enabled' : 'disabled'} successfully`,
+            allowGuests: meeting.allowGuests,
+        });
+    } catch (error) {
+        console.error('External sharing toggle error:', error);
+        res.status(500).json({ message: 'Server error updating sharing settings' });
     }
 });
 

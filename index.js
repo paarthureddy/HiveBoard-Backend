@@ -12,6 +12,7 @@ import inviteRoutes from './routes/invites.js';
 import aiRoutes from './routes/ai.js';
 import userRoutes from './routes/user.js';
 import analyticsRoutes from './routes/analytics.js';
+import exportRoutes from './routes/export.js';
 import { setupSocketHandlers } from './socketHandlers.js';
 
 // Load environment variables from .env file
@@ -80,6 +81,7 @@ app.use('/api/invites', inviteRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/export', exportRoutes);
 
 // Health check route to verify server status
 app.get('/api/health', (req, res) => {

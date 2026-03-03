@@ -1,103 +1,222 @@
 import express from 'express';
-import ActivityLog from '../models/ActivityLog.js';
-import Room from '../models/Room.js';
+import mongoose from 'mongoose';
+import SessionActivity from '../models/SessionActivity.js';
+import ActivityEvent from '../models/ActivityEvent.js';
+import Meeting from '../models/Meeting.js';
+import protect from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Get session analytics summary
-router.get('/summary/:roomId', async (req, res) => {
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/analytics/user-report
+// Returns an aggregated activity report for the authenticated user across all
+// meetings they have participated in.
+// Access: Private (authenticated users only)
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/user-report', protect, async (req, res) => {
     try {
-        const { roomId } = req.params;
+        const userId = req.user._id;
 
-        const logs = await ActivityLog.find({ roomId }).sort({ timestamp: 1 });
+        // ── Aggregate all sessions for this user ──────────────────────────────
+        const sessions = await SessionActivity.find({ userId })
+            .populate('meetingId', 'title createdAt')
+            .sort({ joinedAt: -1 });
 
-        if (!logs) {
-            return res.status(404).json({ message: 'No logs found for this room' });
+        const totalSessions = sessions.length;
+        let totalDurationSeconds = 0;
+        let totalStrokes = 0;
+        let totalStickyNotes = 0;
+        let totalMessages = 0;
+        let totalTextItems = 0;
+        let totalCroquis = 0;
+
+        const perMeetingMap = new Map();
+
+        for (const s of sessions) {
+            totalDurationSeconds += s.durationSeconds || 0;
+            totalStrokes += s.summary.strokeCount;
+            totalStickyNotes += s.summary.stickyNoteCount;
+            totalMessages += s.summary.messageCount;
+            totalTextItems += s.summary.textItemCount;
+            totalCroquis += s.summary.croquisCount;
+
+            const mid = s.meetingId?._id?.toString() ?? s.meetingId?.toString();
+            if (!mid) continue;
+
+            if (!perMeetingMap.has(mid)) {
+                perMeetingMap.set(mid, {
+                    meetingId: mid,
+                    title: s.meetingId?.title ?? 'Untitled',
+                    sessions: 0,
+                    totalDurationSeconds: 0,
+                    strokeCount: 0,
+                    stickyNoteCount: 0,
+                    messageCount: 0,
+                    textItemCount: 0,
+                    croquisCount: 0,
+                    lastJoinedAt: null,
+                });
+            }
+
+            const m = perMeetingMap.get(mid);
+            m.sessions += 1;
+            m.totalDurationSeconds += s.durationSeconds || 0;
+            m.strokeCount += s.summary.strokeCount;
+            m.stickyNoteCount += s.summary.stickyNoteCount;
+            m.messageCount += s.summary.messageCount;
+            m.textItemCount += s.summary.textItemCount;
+            m.croquisCount += s.summary.croquisCount;
+            if (!m.lastJoinedAt || s.joinedAt > m.lastJoinedAt) {
+                m.lastJoinedAt = s.joinedAt;
+            }
         }
 
-        const totalEdits = logs.filter(log => log.action === 'edit').length;
-        const viewers = new Set(logs.filter(log => log.action === 'view').map(log => log.userId || log.guestId));
-        const totalViewers = viewers.size;
-
-        // Group actions over time for activity timeline
-        const activityTimeline = logs.reduce((acc, log) => {
-            const date = new Date(log.timestamp).toISOString().split('T')[0];
-            if (!acc[date]) {
-                acc[date] = { edits: 0, views: 0, joins: 0 };
-            }
-            if (log.action === 'edit') acc[date].edits++;
-            if (log.action === 'view') acc[date].views++;
-            if (log.action === 'join') acc[date].joins++;
-            return acc;
-        }, {});
-
-        // Participation metrics
-        const userContributions = logs.reduce((acc, log) => {
-            const userKey = log.userName || log.guestId || log.userId || 'Unknown';
-            if (!acc[userKey]) {
-                acc[userKey] = { editCount: 0, viewCount: 0, joinCount: 0 };
-            }
-            if (log.action === 'edit') acc[userKey].editCount++;
-            if (log.action === 'view') acc[userKey].viewCount++;
-            if (log.action === 'join') acc[userKey].joinCount++;
-            return acc;
-        }, {});
-
-        res.json({
-            totalEdits,
-            totalViewers,
-            activityTimeline,
-            userContributions
-        });
-    } catch (error) {
-        console.error('Error fetching analytics summary:', error);
-        res.status(500).json({ message: 'Server error' });
-    }
-});
-
-// Get user specific contribution report
-router.get('/user/:roomId/:userId', async (req, res) => {
-    try {
-        const { roomId, userId } = req.params;
-
-        const logs = await ActivityLog.find({
-            roomId,
-            $or: [{ userId }, { guestId: userId }]
-        }).sort({ timestamp: 1 });
-
-        const editCount = logs.filter(log => log.action === 'edit').length;
-
-        // Calculate session time (naive approach: diff between first join and last leave/action)
-        let sessionTimeMs = 0;
-        if (logs.length > 0) {
-            const firstAction = new Date(logs[0].timestamp).getTime();
-            const lastAction = new Date(logs[logs.length - 1].timestamp).getTime();
-            sessionTimeMs = lastAction - firstAction;
-        }
-
-        res.json({
-            editCount,
-            sessionTimeMinutes: Math.round(sessionTimeMs / 60000)
-        });
-
-    } catch (error) {
-        console.error('Error fetching user stats:', error);
-        res.status(500).json({ message: 'Server error' });
-    }
-});
-
-// Get detailed edit history
-router.get('/history/:roomId', async (req, res) => {
-    try {
-        const { roomId } = req.params;
-        const edits = await ActivityLog.find({ roomId, action: 'edit' })
+        // ── Recent events (last 20) ───────────────────────────────────────────
+        const recentEvents = await ActivityEvent.find({ userId })
             .sort({ timestamp: -1 })
-            .limit(100); // Last 100 edits
+            .limit(20)
+            .select('eventType timestamp meetingId meta');
 
-        res.json(edits);
+        res.json({
+            userId,
+            overview: {
+                totalSessions,
+                totalDurationSeconds,
+                totalDurationMinutes: parseFloat((totalDurationSeconds / 60).toFixed(2)),
+                totalStrokes,
+                totalStickyNotes,
+                totalMessages,
+                totalTextItems,
+                totalCroquis,
+            },
+            perMeeting: Array.from(perMeetingMap.values()),
+            recentEvents,
+        });
     } catch (error) {
-        console.error('Error fetching edit history:', error);
-        res.status(500).json({ message: 'Server error' });
+        console.error('[Analytics] user-report error:', error);
+        res.status(500).json({ message: 'Server error generating user report' });
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/analytics/meeting/:id
+// Returns a full activity report for a specific meeting.
+// Access: Private — only the meeting owner may view this.
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/meeting/:id', protect, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ message: 'Invalid meeting ID' });
+        }
+
+        // Verify meeting ownership
+        const meeting = await Meeting.findById(id).populate('createdBy', 'name email');
+        if (!meeting) {
+            return res.status(404).json({ message: 'Meeting not found' });
+        }
+        if (meeting.createdBy._id.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: 'Not authorized to view analytics for this meeting' });
+        }
+
+        // ── All sessions for this meeting ─────────────────────────────────────
+        const sessions = await SessionActivity.find({ meetingId: id })
+            .sort({ joinedAt: -1 })
+            .populate('userId', 'name email avatar');
+
+        const totalSessions = sessions.length;
+        const uniqueUserIds = new Set();
+        const uniqueGuestIds = new Set();
+        let totalDurationSeconds = 0;
+        let totalStrokes = 0;
+        let totalStickyNotes = 0;
+        let totalMessages = 0;
+        let totalTextItems = 0;
+        let totalCroquis = 0;
+
+        for (const s of sessions) {
+            if (s.userId) uniqueUserIds.add(s.userId._id?.toString() ?? s.userId.toString());
+            if (s.guestId) uniqueGuestIds.add(s.guestId);
+            totalDurationSeconds += s.durationSeconds || 0;
+            totalStrokes += s.summary.strokeCount;
+            totalStickyNotes += s.summary.stickyNoteCount;
+            totalMessages += s.summary.messageCount;
+            totalTextItems += s.summary.textItemCount;
+            totalCroquis += s.summary.croquisCount;
+        }
+
+        // ── Event volume over time (hourly buckets) ───────────────────────────
+        const hourlyBuckets = await ActivityEvent.aggregate([
+            {
+                $match: { meetingId: new mongoose.Types.ObjectId(id) },
+            },
+            {
+                $group: {
+                    _id: {
+                        year: { $year: '$timestamp' },
+                        month: { $month: '$timestamp' },
+                        day: { $dayOfMonth: '$timestamp' },
+                        hour: { $hour: '$timestamp' },
+                    },
+                    count: { $sum: 1 },
+                },
+            },
+            { $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1, '_id.hour': 1 } },
+        ]);
+
+        // ── Event breakdown by type ───────────────────────────────────────────
+        const eventBreakdown = await ActivityEvent.aggregate([
+            { $match: { meetingId: new mongoose.Types.ObjectId(id) } },
+            { $group: { _id: '$eventType', count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+        ]);
+
+        // ── Invite-used count ─────────────────────────────────────────────────
+        const inviteUsedCount = await ActivityEvent.countDocuments({
+            meetingId: new mongoose.Types.ObjectId(id),
+            eventType: 'invite-used',
+        });
+
+        res.json({
+            meeting: {
+                _id: meeting._id,
+                title: meeting.title,
+                createdBy: meeting.createdBy,
+                createdAt: meeting.createdAt,
+            },
+            overview: {
+                totalSessions,
+                uniqueAuthenticatedUsers: uniqueUserIds.size,
+                uniqueGuests: uniqueGuestIds.size,
+                totalDurationSeconds,
+                averageSessionDurationSeconds: totalSessions > 0
+                    ? Math.round(totalDurationSeconds / totalSessions)
+                    : 0,
+                totalStrokes,
+                totalStickyNotes,
+                totalMessages,
+                totalTextItems,
+                totalCroquis,
+                inviteUsedCount,
+            },
+            sessions: sessions.map(s => ({
+                _id: s._id,
+                participant: s.userId
+                    ? { type: 'user', id: s.userId._id, name: s.userId.name, email: s.userId.email, avatar: s.userId.avatar }
+                    : { type: 'guest', id: s.guestId, name: s.participantName },
+                role: s.role,
+                joinedAt: s.joinedAt,
+                leftAt: s.leftAt,
+                durationSeconds: s.durationSeconds,
+                summary: s.summary,
+            })),
+            activityTimeline: hourlyBuckets,
+            eventBreakdown,
+        });
+    } catch (error) {
+        console.error('[Analytics] meeting report error:', error);
+        res.status(500).json({ message: 'Server error generating meeting report' });
     }
 });
 
