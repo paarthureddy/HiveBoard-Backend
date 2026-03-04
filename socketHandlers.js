@@ -172,6 +172,7 @@ export const setupSocketHandlers = (io) => {
                             stickyNotes: meeting.canvasData.stickyNotes || [],
                             textItems: meeting.canvasData.textItems || [],
                             croquis: meeting.canvasData.croquis || [],
+                            backgroundColor: meeting.canvasData.backgroundColor || null,
                         });
                     }
 
@@ -198,6 +199,48 @@ export const setupSocketHandlers = (io) => {
             // Broadcast to everyone else in the room
             socket.to(socket.roomId).emit('canvas-update', data);
         });
+
+        // ── Canvas Background Color ───────────────────────────────────────────
+        const ALLOWED_BG_COLORS = [
+            '#FFF3DC', // Light Cream
+            '#FFF0F3', // Blush Pink
+            '#FAEEF1', // Light Burgundy
+            '#F0FAF4', // Pale Emerald
+            '#F0F3FF', // Very Light Navy
+            null,      // default (no background / white)
+        ];
+
+        socket.on('set-canvas-background', async (data) => {
+            try {
+                const { color, meetingId } = data;
+
+                // Validate against allowed palette
+                if (!ALLOWED_BG_COLORS.includes(color)) {
+                    return socket.emit('error', { message: 'Invalid background color.' });
+                }
+
+                // Broadcast immediately to all OTHER users so their canvas updates in real-time
+                socket.to(socket.roomId).emit('canvas-background-changed', { color });
+
+                // Persist to DB
+                const targetMeetingId = meetingId || socket.meetingId;
+                if (targetMeetingId) {
+                    const meeting = await Meeting.findById(targetMeetingId);
+                    if (meeting) {
+                        meeting.canvasData = {
+                            ...meeting.canvasData,
+                            backgroundColor: color,
+                        };
+                        meeting.markModified('canvasData');
+                        await meeting.save();
+                        console.log(`🎨 Canvas background updated to ${color} for meeting ${targetMeetingId}`);
+                    }
+                }
+            } catch (error) {
+                console.error('Error setting canvas background:', error);
+            }
+        });
+        // ─────────────────────────────────────────────────────────────────────
 
         // Handle cursor movement
         socket.on('cursor-move', (data) => {
@@ -438,8 +481,12 @@ export const setupSocketHandlers = (io) => {
                     console.log('💾 Message saved to DB:', newMessage._id);
                     console.log('📡 Broadcasting to room:', socket.roomId);
 
-                    // Broadcast to everyone in room including sender (to confirm save)
-                    io.to(socket.roomId).emit('receive-message', newMessage);
+                    // Broadcast to everyone ELSE in the room (not the sender)
+                    socket.to(socket.roomId).emit('receive-message', newMessage);
+
+                    // Confirm save back to the sender with a flag so the frontend
+                    // can replace the optimistic message instead of adding a duplicate
+                    socket.emit('message-confirmed', newMessage);
 
                     console.log('✅ Message broadcast complete');
 
