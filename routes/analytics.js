@@ -220,4 +220,200 @@ router.get('/meeting/:id', protect, async (req, res) => {
     }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/analytics/metrics/:meetingId
+// Processes raw activity logs into meaningful KPIs:
+//   - edits (strokes + sticky notes + text + croquis)
+//   - views (participants who never edited)
+//   - participation rate, avg session duration, peak activity hour
+// Access: Private — meeting owner only
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/metrics/:meetingId', protect, async (req, res) => {
+    try {
+        const { meetingId } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(meetingId)) {
+            return res.status(400).json({ message: 'Invalid meeting ID' });
+        }
+
+        // Ownership check
+        const meeting = await Meeting.findById(meetingId);
+        if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
+        if (meeting.createdBy.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+
+        const sessions = await SessionActivity.find({ meetingId });
+
+        if (sessions.length === 0) {
+            return res.json({ meetingId, message: 'No sessions recorded yet', metrics: null });
+        }
+
+        let totalEdits = 0;
+        let viewerCount = 0;
+        let editorCount = 0;
+        let totalDuration = 0;
+
+        const sessionMetrics = sessions.map(s => {
+            const edits = s.summary.strokeCount + s.summary.stickyNoteCount +
+                s.summary.textItemCount + s.summary.croquisCount;
+            const isViewer = edits === 0;
+
+            totalEdits += edits;
+            totalDuration += s.durationSeconds || 0;
+            if (isViewer) viewerCount++; else editorCount++;
+
+            // Participation score: weighted combination of edits + messages + duration
+            const durationMinutes = (s.durationSeconds || 0) / 60;
+            const participationScore = parseFloat(
+                ((edits * 2) + (s.summary.messageCount * 1.5) + (durationMinutes * 0.5)).toFixed(2)
+            );
+
+            return {
+                sessionId: s._id,
+                participantName: s.participantName,
+                role: s.role,
+                joinedAt: s.joinedAt,
+                leftAt: s.leftAt,
+                durationSeconds: s.durationSeconds,
+                edits,
+                messages: s.summary.messageCount,
+                participationScore,
+                isViewer,
+            };
+        });
+
+        // Peak activity hour from ActivityEvent
+        const peakHour = await ActivityEvent.aggregate([
+            { $match: { meetingId: new mongoose.Types.ObjectId(meetingId) } },
+            {
+                $group: {
+                    _id: { $hour: '$timestamp' },
+                    count: { $sum: 1 },
+                },
+            },
+            { $sort: { count: -1 } },
+            { $limit: 1 },
+        ]);
+
+        const totalParticipants = sessions.length;
+        const participationRate = parseFloat(((editorCount / totalParticipants) * 100).toFixed(1));
+        const avgSessionDurationSeconds = Math.round(totalDuration / totalParticipants);
+
+        res.json({
+            meetingId,
+            title: meeting.title,
+            metrics: {
+                totalParticipants,
+                editorCount,
+                viewerCount,
+                participationRate: `${participationRate}%`,
+                totalEdits,
+                avgSessionDurationSeconds,
+                avgSessionDurationMinutes: parseFloat((avgSessionDurationSeconds / 60).toFixed(2)),
+                peakActivityHour: peakHour[0]?._id ?? null,
+            },
+            sessionBreakdown: sessionMetrics.sort((a, b) => b.participationScore - a.participationScore),
+        });
+    } catch (error) {
+        console.error('[Analytics] metrics error:', error);
+        res.status(500).json({ message: 'Server error generating metrics' });
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/analytics/compare
+// Compare two or more sessions side by side.
+// Body: { sessionIds: ["id1", "id2", ...] }  (2–10 sessions)
+// Access: Private
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/compare', protect, async (req, res) => {
+    try {
+        const { sessionIds } = req.body;
+
+        if (!Array.isArray(sessionIds) || sessionIds.length < 2) {
+            return res.status(400).json({ message: 'Provide at least 2 sessionIds to compare' });
+        }
+
+        if (sessionIds.length > 10) {
+            return res.status(400).json({ message: 'Cannot compare more than 10 sessions at once' });
+        }
+
+        // Validate all IDs
+        const invalid = sessionIds.find(id => !mongoose.Types.ObjectId.isValid(id));
+        if (invalid) return res.status(400).json({ message: `Invalid session ID: ${invalid}` });
+
+        const sessions = await SessionActivity.find({ _id: { $in: sessionIds } })
+            .populate('meetingId', 'title createdAt createdBy')
+            .populate('userId', 'name email');
+
+        if (sessions.length === 0) {
+            return res.status(404).json({ message: 'No sessions found for given IDs' });
+        }
+
+        // Ensure the user owns the meetings referenced by these sessions
+        const unauthorised = sessions.find(
+            s => s.meetingId?.createdBy?.toString() !== req.user._id.toString()
+        );
+        if (unauthorised) {
+            return res.status(403).json({ message: 'Not authorized to compare one or more of these sessions' });
+        }
+
+        // Build per-session comparison object
+        const comparison = sessions.map(s => {
+            const edits = s.summary.strokeCount + s.summary.stickyNoteCount +
+                s.summary.textItemCount + s.summary.croquisCount;
+            const durationMinutes = parseFloat(((s.durationSeconds || 0) / 60).toFixed(2));
+            const participationScore = parseFloat(
+                ((edits * 2) + (s.summary.messageCount * 1.5) + (durationMinutes * 0.5)).toFixed(2)
+            );
+
+            return {
+                sessionId: s._id,
+                meeting: {
+                    id: s.meetingId?._id,
+                    title: s.meetingId?.title ?? 'Untitled',
+                },
+                participant: s.userId
+                    ? { type: 'user', name: s.userId.name, email: s.userId.email }
+                    : { type: 'guest', name: s.participantName },
+                role: s.role,
+                joinedAt: s.joinedAt,
+                leftAt: s.leftAt,
+                durationSeconds: s.durationSeconds,
+                durationMinutes,
+                metrics: {
+                    edits,
+                    strokes: s.summary.strokeCount,
+                    stickyNotes: s.summary.stickyNoteCount,
+                    textItems: s.summary.textItemCount,
+                    croquis: s.summary.croquisCount,
+                    messages: s.summary.messageCount,
+                    participationScore,
+                },
+            };
+        });
+
+        // Summary diff — best vs worst across compared sessions
+        const scores = comparison.map(c => c.metrics.participationScore);
+        const maxScore = Math.max(...scores);
+        const minScore = Math.min(...scores);
+
+        res.json({
+            comparedSessions: comparison.length,
+            winner: comparison.find(c => c.metrics.participationScore === maxScore),
+            summary: {
+                highestParticipationScore: maxScore,
+                lowestParticipationScore: minScore,
+                scoreDifference: parseFloat((maxScore - minScore).toFixed(2)),
+            },
+            sessions: comparison,
+        });
+    } catch (error) {
+        console.error('[Analytics] compare error:', error);
+        res.status(500).json({ message: 'Server error comparing sessions' });
+    }
+});
+
 export default router;
+
