@@ -82,9 +82,12 @@ export const setupSocketHandlers = (io) => {
                 }
 
                 if (room) {
-                    // Clean up duplicate connections for the same user/guest
+                    // Clean up duplicate connections and remove dead sockets
+                    const ioRoom = io.sockets.adapter.rooms.get(roomId);
                     const initialCount = room.activeConnections.length;
                     room.activeConnections = room.activeConnections.filter(conn => {
+                        // Check if the socket is actually in the room adapter
+                        if (!ioRoom || !ioRoom.has(conn.socketId)) return false;
                         if (conn.socketId === socket.id) return false;
                         if (userId && conn.userId && conn.userId.toString() === userId.toString()) return false;
                         if (guestId && conn.guestId === guestId) return false;
@@ -349,7 +352,7 @@ export const setupSocketHandlers = (io) => {
                 try {
                     const meeting = await Meeting.findById(data.meetingId);
                     if (meeting) {
-                        meeting.canvasData = { strokes: [] };
+                        meeting.set('canvasData', { strokes: [], stickyNotes: [], textItems: [], croquis: [] });
                         meeting.markModified('canvasData');
                         await meeting.save();
                         console.log(`🧹 Canvas cleared for meeting ${data.meetingId}`);
