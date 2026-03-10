@@ -152,7 +152,7 @@ export const setupSocketHandlers = (io) => {
                         socketId: conn.socketId,
                         userId: conn.userId ? conn.userId.toString() : null,
                         guestId: conn.guestId,
-                        name: conn.name,
+                        name: conn.name || 'Anonymous',
                         isOwner: conn.userId && conn.userId.toString() === room.owner.toString(),
                     }));
 
@@ -188,9 +188,7 @@ export const setupSocketHandlers = (io) => {
                         participants,
                     });
 
-                    // Log view/join
-                    await logActivity(socket, 'join');
-                    await logActivity(socket, 'view');
+
                 }
             } catch (error) {
                 console.error('Error joining room:', error);
@@ -334,7 +332,7 @@ export const setupSocketHandlers = (io) => {
         socket.on('clear-canvas', async (data) => {
             // Broadcast to others
             socket.to(socket.roomId).emit('clear-canvas', data);
-            await logActivity(socket, 'clear', { type: 'clear-canvas' });
+
 
             // ── Activity Tracking ─────────────────────────────────────────────
             if (socket.activitySessionId) {
@@ -704,7 +702,7 @@ export const setupSocketHandlers = (io) => {
 
                         socket.leave(socket.roomId);
                         console.log(`👋 User left room ${socket.roomId}`);
-                        await logActivity(socket, 'leave');
+
                     }
                 }
             } catch (error) {
