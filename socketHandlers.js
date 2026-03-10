@@ -325,6 +325,30 @@ export const setupSocketHandlers = (io) => {
             }
         });
 
+        socket.on('delete-stroke', async (data) => {
+            console.log(`🖌️ delete-stroke in room ${socket.roomId}`);
+            socket.to(socket.roomId).emit('delete-stroke', data);
+
+            if (data.meetingId) {
+                try {
+                    const meeting = await Meeting.findById(data.meetingId);
+                    if (meeting && meeting.canvasData && meeting.canvasData.strokes) {
+                        const currentStrokes = meeting.canvasData.strokes;
+                        const updatedStrokes = currentStrokes.filter(s => s.id !== data.id);
+
+                        meeting.canvasData = {
+                            ...meeting.canvasData,
+                            strokes: updatedStrokes
+                        };
+                        meeting.markModified('canvasData');
+                        await meeting.save();
+                    }
+                } catch (err) {
+                    console.error('Error deleting stroke:', err);
+                }
+            }
+        });
+
         socket.on('draw-point', (data) => {
             socket.to(socket.roomId).emit('draw-point', data);
         });
