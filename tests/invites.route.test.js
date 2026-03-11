@@ -181,7 +181,8 @@ describe('Invite Routes', () => {
             const mockMeeting = {
                 _id: 'meeting123',
                 inviteEnabled: true,
-                createdBy: 'owner123'
+                createdBy: 'owner123',
+                allowGuests: true
             };
             Meeting.findOne.mockResolvedValue(mockMeeting);
 

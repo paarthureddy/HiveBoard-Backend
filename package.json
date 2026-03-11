@@ -7,6 +7,8 @@
     "scripts": {
         "dev": "nodemon index.js",
         "start": "node index.js",
+        "test": "vitest",
+        "test:watch": "vitest --watch",
         "lint": "echo 'Linting not configured yet' && exit 0"
     },
     "keywords": [
@@ -31,6 +33,8 @@
         "socket.io": "^4.8.3"
     },
     "devDependencies": {
-        "nodemon": "^3.1.13"
+        "nodemon": "^3.1.13",
+        "supertest": "^7.2.2",
+        "vitest": "^4.0.18"
     }
 }
